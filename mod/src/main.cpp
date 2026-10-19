@@ -36,6 +36,7 @@ struct Agent {
 
     // "Learn Rapidly": faster game speed, instant respawn, bigger learning steps.
     bool rapid = false;
+    bool useCheckpoints = true;   // false = rapid learning in normal mode from 0%
     int deadTicks = 0;
     bool skipDelayedReset = false;
 
@@ -225,6 +226,7 @@ class AIMenuLayer : public CCLayerColor {
     CCLabelBMFont* m_stats = nullptr;
     CCMenuItemSpriteExtra* m_startBtn = nullptr;
     CCMenuItemSpriteExtra* m_rapidBtn = nullptr;
+    CCMenuItemSpriteExtra* m_rapidNoCpBtn = nullptr;
     CCMenuItemSpriteExtra* m_replayBtn = nullptr;
     std::vector<CCNode*> m_hidden;
 
@@ -257,16 +259,16 @@ public:
         }
 
         auto bg = CCScale9Sprite::create("GJ_square01.png");
-        bg->setContentSize({300.f, 270.f});
+        bg->setContentSize({320.f, 300.f});
         bg->setPosition(win / 2);
         this->addChild(bg);
 
         auto title = CCLabelBMFont::create("AI Learner", "goldFont.fnt");
-        title->setPosition({win.width / 2, win.height / 2 + 110.f});
+        title->setPosition({win.width / 2, win.height / 2 + 127.f});
         this->addChild(title);
 
         m_stats = CCLabelBMFont::create("", "chatFont.fnt");
-        m_stats->setPosition({win.width / 2, win.height / 2 + 80.f});
+        m_stats->setPosition({win.width / 2, win.height / 2 + 98.f});
         this->addChild(m_stats);
 
         auto menu = CCMenu::create();
@@ -274,20 +276,24 @@ public:
         this->addChild(menu);
 
         m_startBtn = CCMenuItemSpriteExtra::create(makeSprite("Start AI", false), this, menu_selector(AIMenuLayer::onStart));
-        m_startBtn->setPosition({0.f, 45.f});
+        m_startBtn->setPosition({0.f, 62.f});
         menu->addChild(m_startBtn);
 
         m_rapidBtn = CCMenuItemSpriteExtra::create(makeSprite("Learn Rapidly", false), this, menu_selector(AIMenuLayer::onRapid));
-        m_rapidBtn->setPosition({0.f, 5.f});
+        m_rapidBtn->setPosition({0.f, 24.f});
         menu->addChild(m_rapidBtn);
 
+        m_rapidNoCpBtn = CCMenuItemSpriteExtra::create(makeSprite("Learn Rapidly (No Checkpoints)", false), this, menu_selector(AIMenuLayer::onRapidNoCp));
+        m_rapidNoCpBtn->setPosition({0.f, -14.f});
+        menu->addChild(m_rapidNoCpBtn);
+
         m_replayBtn = CCMenuItemSpriteExtra::create(makeSprite("Replay Best Run", false), this, menu_selector(AIMenuLayer::onReplay));
-        m_replayBtn->setPosition({0.f, -35.f});
+        m_replayBtn->setPosition({0.f, -52.f});
         menu->addChild(m_replayBtn);
 
         auto closeBtn = CCMenuItemSpriteExtra::create(
             ButtonSprite::create("Close", "goldFont.fnt", "GJ_button_04.png", 0.7f), this, menu_selector(AIMenuLayer::onClose));
-        closeBtn->setPosition({0.f, -95.f});
+        closeBtn->setPosition({0.f, -112.f});
         menu->addChild(closeBtn);
 
         this->refresh();
@@ -301,8 +307,10 @@ public:
         m_stats->setString(fmt::format("Attempts: {}   Best: {:.1f}%   Best run: {:.1f}%",
             g_ai.attempts, std::min(pct, 100.f), std::min(runPct, 100.f)).c_str());
         m_startBtn->setNormalImage(makeSprite(g_ai.active ? "Stop AI" : "Start AI", g_ai.active));
-        bool cycling = g_ai.rapid || g_ai.verifying;
-        m_rapidBtn->setNormalImage(makeSprite(cycling ? "Learn Rapidly: ON" : "Learn Rapidly", cycling));
+        bool withCp = (g_ai.rapid || g_ai.verifying) && g_ai.useCheckpoints;
+        bool noCp = g_ai.rapid && !g_ai.useCheckpoints;
+        m_rapidBtn->setNormalImage(makeSprite(withCp ? "Learn Rapidly: ON" : "Learn Rapidly", withCp));
+        m_rapidNoCpBtn->setNormalImage(makeSprite(noCp ? "No Checkpoints: ON" : "Learn Rapidly (No Checkpoints)", noCp));
     }
 
     void onStart(CCObject*) {
@@ -318,15 +326,21 @@ public:
     }
 
     // Turning rapid on also starts the AI and resumes, so one press gets it going.
-    void onRapid(CCObject*) {
+    void onRapid(CCObject*) { this->toggleRapid(true); }
+    void onRapidNoCp(CCObject*) { this->toggleRapid(false); }
+
+    void toggleRapid(bool checkpoints) {
         auto pl = PlayLayer::get();
         if (!pl) return;
-        g_ai.rapid = !(g_ai.rapid || g_ai.verifying);
+        bool wasOn = (g_ai.rapid || g_ai.verifying) && g_ai.useCheckpoints == checkpoints;
+        g_ai.rapid = !wasOn;
+        g_ai.useCheckpoints = checkpoints;
         g_ai.verifying = false;
         g_ai.pendingSwitch = Agent::Switch::None;
         g_ai.checkpointXs.clear();
         g_ai.deathsSinceProgress = 0;
-        if (g_ai.rapid != pl->m_isPracticeMode) pl->togglePracticeMode(g_ai.rapid);
+        bool wantPractice = g_ai.rapid && checkpoints;
+        if (wantPractice != pl->m_isPracticeMode) pl->togglePracticeMode(wantPractice);
         if (g_ai.rapid && !g_ai.active) {
             startAI(pl);
             this->resumeGame();
@@ -438,7 +452,7 @@ class $modify(AIPlayLayer, PlayLayer) {
             if (g_ai.verifying) {
                 g_ai.pendingSwitch = Agent::Switch::ToPractice;
             }
-            if (g_ai.rapid) {
+            if (g_ai.rapid && g_ai.useCheckpoints) {
                 if (g_ai.bestX > g_ai.bestAtLastCheck + 30.f) {
                     g_ai.bestAtLastCheck = g_ai.bestX;
                     g_ai.deathsSinceProgress = 0;
@@ -476,9 +490,10 @@ class $modify(AIPlayLayer, PlayLayer) {
             g_ai.pendingSwitch = Agent::Switch::ToNormal;
             return;
         }
-        if (g_ai.active && g_ai.verifying) {
+        if (g_ai.active && (g_ai.verifying || (g_ai.rapid && !m_isPracticeMode))) {
             // Beat it for real: stop and let the normal end screen play.
             g_ai.verifying = false;
+            g_ai.rapid = false;
             g_ai.active = false;
             g_ai.learn(false);
             g_ai.save();
@@ -525,7 +540,8 @@ class $modify(AIPlayLayer, PlayLayer) {
             f->label->setString(fmt::format("Replaying best run ({:.1f}%)", std::min(pct, 100.f)).c_str());
         } else if (g_ai.active) {
             float pct = m_levelLength > 0 ? 100.f * g_ai.bestX / m_levelLength : 0.f;
-            const char* phase = g_ai.verifying ? "normal run" : g_ai.rapid ? "practice (rapid)" : "learning";
+            const char* phase = g_ai.verifying ? "normal run"
+                : g_ai.rapid ? (g_ai.useCheckpoints ? "practice (rapid)" : "rapid, no checkpoints") : "learning";
             f->label->setString(fmt::format("AI {}  attempt {}  best {:.1f}%", phase, g_ai.attempts, std::min(pct, 100.f)).c_str());
         }
     }
@@ -598,7 +614,7 @@ class $modify(AIGameLayer, GJBaseGameLayer) {
         g_ai.bestX = std::max(g_ai.bestX, x);
 
         // Drop a checkpoint on solid ground a little behind the furthest point reached.
-        if (g_ai.rapid && p->m_isOnGround) {
+        if (g_ai.rapid && g_ai.useCheckpoints && p->m_isOnGround) {
             float lastCp = g_ai.checkpointXs.empty() ? 0.f : g_ai.checkpointXs.back();
             if (x > lastCp + 450.f && x < g_ai.bestX - 150.f) {
                 pl->markCheckpoint();
