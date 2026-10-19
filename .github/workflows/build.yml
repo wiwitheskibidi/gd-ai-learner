@@ -4,12 +4,17 @@ on:
   workflow_dispatch:
   push:
 
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   mod:
     strategy:
       fail-fast: false
       matrix:
-        target: [Android64, Android32]
+        # BlueStacks (Pie64/Android 11) is 64-bit; add Android32 back for old 32-bit phones
+        target: [Android64]
     name: Mod (${{ matrix.target }})
     runs-on: ubuntu-latest
     steps:
