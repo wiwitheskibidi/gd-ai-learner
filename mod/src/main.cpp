@@ -44,6 +44,11 @@ struct Agent {
     int deathsSinceProgress = 0;
     float bestAtLastCheck = 0.f;
 
+    // After beating the level in practice, try a real run in normal mode.
+    // A death there sends it back to practice to train that part again.
+    bool verifying = false;
+    enum class Switch { None, ToNormal, ToPractice } pendingSwitch = Switch::None;
+
     std::unordered_map<uint64_t, std::array<float, 2>> q;
     std::vector<Step> trajectory;
     std::mt19937 rng{std::random_device{}()};
@@ -235,7 +240,8 @@ public:
         m_stats->setString(fmt::format("Attempts: {}   Best: {:.1f}%   States: {}",
             g_ai.attempts, std::min(pct, 100.f), g_ai.q.size()).c_str());
         m_startBtn->setNormalImage(makeSprite(g_ai.active ? "Stop AI" : "Start AI", g_ai.active));
-        m_rapidBtn->setNormalImage(makeSprite(g_ai.rapid ? "Learn Rapidly: ON" : "Learn Rapidly", g_ai.rapid));
+        bool cycling = g_ai.rapid || g_ai.verifying;
+        m_rapidBtn->setNormalImage(makeSprite(cycling ? "Learn Rapidly: ON" : "Learn Rapidly", cycling));
     }
 
     void onStart(CCObject*) {
@@ -254,7 +260,9 @@ public:
     void onRapid(CCObject*) {
         auto pl = PlayLayer::get();
         if (!pl) return;
-        g_ai.rapid = !g_ai.rapid;
+        g_ai.rapid = !(g_ai.rapid || g_ai.verifying);
+        g_ai.verifying = false;
+        g_ai.pendingSwitch = Agent::Switch::None;
         g_ai.checkpointXs.clear();
         g_ai.deathsSinceProgress = 0;
         if (g_ai.rapid != pl->m_isPracticeMode) pl->togglePracticeMode(g_ai.rapid);
@@ -332,6 +340,9 @@ class $modify(AIPlayLayer, PlayLayer) {
             g_ai.episodeOver = true;
             g_ai.learn(true);
             handleButton(false, 1, true);
+            if (g_ai.verifying) {
+                g_ai.pendingSwitch = Agent::Switch::ToPractice;
+            }
             if (g_ai.rapid) {
                 if (g_ai.bestX > g_ai.bestAtLastCheck + 30.f) {
                     g_ai.bestAtLastCheck = g_ai.bestX;
@@ -357,6 +368,23 @@ class $modify(AIPlayLayer, PlayLayer) {
     }
 
     void levelComplete() {
+        if (g_ai.active && g_ai.rapid && m_isPracticeMode && !g_ai.episodeOver) {
+            g_ai.episodeOver = true;
+            g_ai.learn(false);
+            g_ai.save();
+            g_ai.pendingSwitch = Agent::Switch::ToNormal;
+            return;
+        }
+        if (g_ai.active && g_ai.verifying) {
+            // Beat it for real: stop and let the normal end screen play.
+            g_ai.verifying = false;
+            g_ai.active = false;
+            g_ai.learn(false);
+            g_ai.save();
+            applyTimeScale(false);
+            PlayLayer::levelComplete();
+            return;
+        }
         if (g_ai.active && !g_ai.episodeOver) {
             g_ai.episodeOver = true;
             g_ai.learn(false);
@@ -370,6 +398,8 @@ class $modify(AIPlayLayer, PlayLayer) {
             g_ai.save();
             g_ai.active = false;
             g_ai.rapid = false;
+            g_ai.verifying = false;
+            g_ai.pendingSwitch = Agent::Switch::None;
             g_ai.checkpointXs.clear();
             applyTimeScale(false);
         }
@@ -390,7 +420,8 @@ class $modify(AIPlayLayer, PlayLayer) {
         f->label->setVisible(g_ai.active);
         if (g_ai.active) {
             float pct = m_levelLength > 0 ? 100.f * g_ai.bestX / m_levelLength : 0.f;
-            f->label->setString(fmt::format("AI attempt {}  best {:.1f}%", g_ai.attempts, std::min(pct, 100.f)).c_str());
+            const char* phase = g_ai.verifying ? "normal run" : g_ai.rapid ? "practice (rapid)" : "learning";
+            f->label->setString(fmt::format("AI {}  attempt {}  best {:.1f}%", phase, g_ai.attempts, std::min(pct, 100.f)).c_str());
         }
     }
 };
@@ -416,6 +447,22 @@ class $modify(AIGameLayer, GJBaseGameLayer) {
     }
 
     void aiStep(PlayLayer* pl) {
+        if (g_ai.pendingSwitch != Agent::Switch::None) {
+            auto to = g_ai.pendingSwitch;
+            g_ai.pendingSwitch = Agent::Switch::None;
+            g_ai.rapid = to == Agent::Switch::ToPractice;
+            g_ai.verifying = to == Agent::Switch::ToNormal;
+            g_ai.checkpointXs.clear();
+            g_ai.deathsSinceProgress = 0;
+            handleButton(false, 1, true);
+            g_ai.holding = false;
+            applyTimeScale(true);
+            // togglePracticeMode restarts the level in the new mode; skip the
+            // game's own delayed respawn if we got here from a death.
+            if (m_player1->m_isDead) g_ai.skipDelayedReset = true;
+            pl->togglePracticeMode(g_ai.rapid);
+            return;
+        }
         if (g_ai.episodeOver || m_player1->m_isDead) {
             // Rapid mode: skip the death animation and respawn after a few ticks.
             if (g_ai.rapid && m_player1->m_isDead && ++g_ai.deadTicks == 4) {
