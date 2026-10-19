@@ -17,7 +17,10 @@ jobs:
       - uses: geode-sdk/build-geode-mod@main
         with:
           path: mod
-          sdk: nightly
+          sdk: v5.11.2
+          bindings: geode-sdk/bindings
+          bindings-ref: 1012fcb37243286184d319404b15fd929098fd47
+          configure-args: -DSKIP_BUILDING_CODEGEN=OFF
           combine: true
           target: ${{ matrix.target }}
 
@@ -46,7 +49,10 @@ jobs:
         with:
           name: ai-mod
           path: mod
-          sdk: nightly
+          sdk: v5.11.2
+          bindings: geode-sdk/bindings
+          bindings-ref: 1012fcb37243286184d319404b15fd929098fd47
+          configure-args: -DSKIP_BUILDING_CODEGEN=OFF
 
       - name: Bundle mod into the APK
         run: |
