@@ -11,6 +11,7 @@
 #include <vector>
 #include <fstream>
 #include <random>
+#include <algorithm>
 
 using namespace geode::prelude;
 
@@ -48,6 +49,29 @@ struct Agent {
     // A death there sends it back to practice to train that part again.
     bool verifying = false;
     enum class Switch { None, ToNormal, ToPractice } pendingSwitch = Switch::None;
+
+    // Best run = input changes keyed by X position, from the level start to the
+    // furthest point reached. Practice attempts are stitched in at their start X.
+    struct Input {
+        float x;
+        bool hold;
+    };
+    std::vector<Input> attemptInputs;
+    std::vector<Input> bestRun;
+    float bestRunEnd = 0.f;
+    bool replaying = false;
+    size_t replayIdx = 0;
+
+    void commitAttempt(float endX) {
+        bool connects = startX <= bestRunEnd + 1.f || startX < 50.f;
+        if (endX <= bestRunEnd || !connects) return;
+        bestRun.erase(std::remove_if(bestRun.begin(), bestRun.end(),
+            [&](Input const& in) { return in.x >= startX; }), bestRun.end());
+        // make sure the button state is defined at the seam
+        bestRun.push_back({startX, false});
+        bestRun.insert(bestRun.end(), attemptInputs.begin(), attemptInputs.end());
+        bestRunEnd = endX;
+    }
 
     std::unordered_map<uint64_t, std::array<float, 2>> q;
     std::vector<Step> trajectory;
@@ -104,7 +128,37 @@ struct Agent {
         return Mod::get()->getSaveDir() / fmt::format("level_{}.qtable", levelID);
     }
 
+    std::filesystem::path runFile() const {
+        return Mod::get()->getSaveDir() / fmt::format("level_{}.bestrun", levelID);
+    }
+
+    void saveRun() {
+        std::ofstream f(runFile(), std::ios::binary);
+        if (!f) return;
+        f.write(reinterpret_cast<const char*>(&bestRunEnd), sizeof(bestRunEnd));
+        for (auto& in : bestRun) {
+            f.write(reinterpret_cast<const char*>(&in.x), sizeof(in.x));
+            char h = in.hold ? 1 : 0;
+            f.write(&h, 1);
+        }
+    }
+
+    void loadRun() {
+        bestRun.clear();
+        bestRunEnd = 0.f;
+        std::ifstream f(runFile(), std::ios::binary);
+        if (!f) return;
+        f.read(reinterpret_cast<char*>(&bestRunEnd), sizeof(bestRunEnd));
+        Input in;
+        char h;
+        while (f.read(reinterpret_cast<char*>(&in.x), sizeof(in.x)) && f.read(&h, 1)) {
+            in.hold = h != 0;
+            bestRun.push_back(in);
+        }
+    }
+
     void save() {
+        saveRun();
         std::ofstream f(file(), std::ios::binary);
         if (!f) return;
         f.write(reinterpret_cast<const char*>(&bestX), sizeof(bestX));
@@ -121,6 +175,7 @@ struct Agent {
         q.clear();
         bestX = 0.f;
         attempts = 0;
+        loadRun();
         std::ifstream f(file(), std::ios::binary);
         if (!f) return;
         f.read(reinterpret_cast<char*>(&bestX), sizeof(bestX));
@@ -170,6 +225,7 @@ class AIMenuLayer : public CCLayerColor {
     CCLabelBMFont* m_stats = nullptr;
     CCMenuItemSpriteExtra* m_startBtn = nullptr;
     CCMenuItemSpriteExtra* m_rapidBtn = nullptr;
+    CCMenuItemSpriteExtra* m_replayBtn = nullptr;
     std::vector<CCNode*> m_hidden;
 
     static ButtonSprite* makeSprite(const char* text, bool on) {
@@ -201,16 +257,16 @@ public:
         }
 
         auto bg = CCScale9Sprite::create("GJ_square01.png");
-        bg->setContentSize({300.f, 230.f});
+        bg->setContentSize({300.f, 270.f});
         bg->setPosition(win / 2);
         this->addChild(bg);
 
         auto title = CCLabelBMFont::create("AI Learner", "goldFont.fnt");
-        title->setPosition({win.width / 2, win.height / 2 + 90.f});
+        title->setPosition({win.width / 2, win.height / 2 + 110.f});
         this->addChild(title);
 
         m_stats = CCLabelBMFont::create("", "chatFont.fnt");
-        m_stats->setPosition({win.width / 2, win.height / 2 + 60.f});
+        m_stats->setPosition({win.width / 2, win.height / 2 + 80.f});
         this->addChild(m_stats);
 
         auto menu = CCMenu::create();
@@ -218,16 +274,20 @@ public:
         this->addChild(menu);
 
         m_startBtn = CCMenuItemSpriteExtra::create(makeSprite("Start AI", false), this, menu_selector(AIMenuLayer::onStart));
-        m_startBtn->setPosition({0.f, 20.f});
+        m_startBtn->setPosition({0.f, 45.f});
         menu->addChild(m_startBtn);
 
         m_rapidBtn = CCMenuItemSpriteExtra::create(makeSprite("Learn Rapidly", false), this, menu_selector(AIMenuLayer::onRapid));
-        m_rapidBtn->setPosition({0.f, -25.f});
+        m_rapidBtn->setPosition({0.f, 5.f});
         menu->addChild(m_rapidBtn);
+
+        m_replayBtn = CCMenuItemSpriteExtra::create(makeSprite("Replay Best Run", false), this, menu_selector(AIMenuLayer::onReplay));
+        m_replayBtn->setPosition({0.f, -35.f});
+        menu->addChild(m_replayBtn);
 
         auto closeBtn = CCMenuItemSpriteExtra::create(
             ButtonSprite::create("Close", "goldFont.fnt", "GJ_button_04.png", 0.7f), this, menu_selector(AIMenuLayer::onClose));
-        closeBtn->setPosition({0.f, -80.f});
+        closeBtn->setPosition({0.f, -95.f});
         menu->addChild(closeBtn);
 
         this->refresh();
@@ -237,8 +297,9 @@ public:
     void refresh() {
         auto pl = PlayLayer::get();
         float pct = pl && pl->m_levelLength > 0 ? 100.f * g_ai.bestX / pl->m_levelLength : 0.f;
-        m_stats->setString(fmt::format("Attempts: {}   Best: {:.1f}%   States: {}",
-            g_ai.attempts, std::min(pct, 100.f), g_ai.q.size()).c_str());
+        float runPct = pl && pl->m_levelLength > 0 ? 100.f * g_ai.bestRunEnd / pl->m_levelLength : 0.f;
+        m_stats->setString(fmt::format("Attempts: {}   Best: {:.1f}%   Best run: {:.1f}%",
+            g_ai.attempts, std::min(pct, 100.f), std::min(runPct, 100.f)).c_str());
         m_startBtn->setNormalImage(makeSprite(g_ai.active ? "Stop AI" : "Start AI", g_ai.active));
         bool cycling = g_ai.rapid || g_ai.verifying;
         m_rapidBtn->setNormalImage(makeSprite(cycling ? "Learn Rapidly: ON" : "Learn Rapidly", cycling));
@@ -273,6 +334,29 @@ public:
         }
         applyTimeScale(g_ai.active);
         this->refresh();
+    }
+
+    void onReplay(CCObject*) {
+        auto pl = PlayLayer::get();
+        if (!pl) return;
+        if (pl->m_level->m_levelID.value() != g_ai.levelID || g_ai.bestRun.empty()) {
+            g_ai.load(pl->m_level->m_levelID.value());
+        }
+        if (g_ai.bestRun.empty()) {
+            Notification::create("No best run recorded yet", NotificationIcon::Info)->show();
+            return;
+        }
+        if (g_ai.active) stopAI(pl);
+        g_ai.rapid = false;
+        g_ai.verifying = false;
+        g_ai.pendingSwitch = Agent::Switch::None;
+        g_ai.replaying = true;
+        g_ai.replayIdx = 0;
+        applyTimeScale(false);
+        this->resumeGame();
+        // restart from 0% in normal mode (togglePracticeMode resets the level itself)
+        if (pl->m_isPracticeMode) pl->togglePracticeMode(false);
+        else pl->resetLevel();
     }
 
     void onClose(CCObject*) {
@@ -322,7 +406,13 @@ class $modify(AIPlayLayer, PlayLayer) {
 
     void resetLevel() {
         PlayLayer::resetLevel();
+        if (g_ai.replaying) {
+            g_ai.replayIdx = 0;
+            handleButton(false, 1, true);
+            return;
+        }
         if (!g_ai.active) return;
+        g_ai.attemptInputs.clear();
         g_ai.attempts++;
         g_ai.episodeOver = false;
         g_ai.deadTicks = 0;
@@ -336,8 +426,13 @@ class $modify(AIPlayLayer, PlayLayer) {
     void destroyPlayer(PlayerObject* player, GameObject* obj) {
         bool realDeath = g_ai.active && !g_ai.episodeOver && obj != m_anticheatSpike;
         PlayLayer::destroyPlayer(player, obj);
+        if (g_ai.replaying && obj != m_anticheatSpike && player->m_isDead) {
+            g_ai.replaying = false;
+            handleButton(false, 1, true);
+        }
         if (realDeath && player->m_isDead) {
             g_ai.episodeOver = true;
+            g_ai.commitAttempt(player->getPositionX());
             g_ai.learn(true);
             handleButton(false, 1, true);
             if (g_ai.verifying) {
@@ -368,6 +463,12 @@ class $modify(AIPlayLayer, PlayLayer) {
     }
 
     void levelComplete() {
+        if (g_ai.replaying) {
+            g_ai.replaying = false;
+            PlayLayer::levelComplete();
+            return;
+        }
+        if (g_ai.active && !g_ai.episodeOver) g_ai.commitAttempt(m_levelLength + 100.f);
         if (g_ai.active && g_ai.rapid && m_isPracticeMode && !g_ai.episodeOver) {
             g_ai.episodeOver = true;
             g_ai.learn(false);
@@ -394,6 +495,7 @@ class $modify(AIPlayLayer, PlayLayer) {
     }
 
     void onQuit() {
+        g_ai.replaying = false;
         if (g_ai.active) {
             g_ai.save();
             g_ai.active = false;
@@ -417,8 +519,11 @@ class $modify(AIPlayLayer, PlayLayer) {
             f->label->setZOrder(1000);
             this->addChild(f->label);
         }
-        f->label->setVisible(g_ai.active);
-        if (g_ai.active) {
+        f->label->setVisible(g_ai.active || g_ai.replaying);
+        if (g_ai.replaying) {
+            float pct = m_levelLength > 0 ? 100.f * g_ai.bestRunEnd / m_levelLength : 0.f;
+            f->label->setString(fmt::format("Replaying best run ({:.1f}%)", std::min(pct, 100.f)).c_str());
+        } else if (g_ai.active) {
             float pct = m_levelLength > 0 ? 100.f * g_ai.bestX / m_levelLength : 0.f;
             const char* phase = g_ai.verifying ? "normal run" : g_ai.rapid ? "practice (rapid)" : "learning";
             f->label->setString(fmt::format("AI {}  attempt {}  best {:.1f}%", phase, g_ai.attempts, std::min(pct, 100.f)).c_str());
@@ -431,6 +536,12 @@ class $modify(AIPlayLayer, PlayLayer) {
 class $modify(AIGameLayer, GJBaseGameLayer) {
     void update(float dt) {
         auto pl = PlayLayer::get();
+        if (g_ai.replaying && pl && static_cast<GJBaseGameLayer*>(pl) == this) {
+            GJBaseGameLayer::update(dt);
+            this->replayStep();
+            static_cast<AIPlayLayer*>(pl)->updateAILabel();
+            return;
+        }
         bool ours = g_ai.active && pl && static_cast<GJBaseGameLayer*>(pl) == this;
         if (!ours) {
             GJBaseGameLayer::update(dt);
@@ -444,6 +555,16 @@ class $modify(AIGameLayer, GJBaseGameLayer) {
             this->aiStep(pl);
         }
         static_cast<AIPlayLayer*>(pl)->updateAILabel();
+    }
+
+    void replayStep() {
+        if (m_player1->m_isDead) return;
+        float x = m_player1->getPositionX();
+        auto& run = g_ai.bestRun;
+        while (g_ai.replayIdx < run.size() && run[g_ai.replayIdx].x <= x) {
+            handleButton(run[g_ai.replayIdx].hold, 1, true);
+            g_ai.replayIdx++;
+        }
     }
 
     void aiStep(PlayLayer* pl) {
@@ -501,6 +622,7 @@ class $modify(AIGameLayer, GJBaseGameLayer) {
         if (hold != g_ai.holding) {
             handleButton(hold, 1, true);
             g_ai.holding = hold;
+            g_ai.attemptInputs.push_back({x, hold});
         }
     }
 };
