@@ -181,7 +181,7 @@ class $modify(AIPlayLayer, PlayLayer) {
     void destroyPlayer(PlayerObject* player, GameObject* obj) {
         bool realDeath = g_ai.active && !g_ai.episodeOver && obj != m_anticheatSpike;
         PlayLayer::destroyPlayer(player, obj);
-        if (realDeath && m_isDead) {
+        if (realDeath && player->m_isDead) {
             g_ai.episodeOver = true;
             g_ai.learn(true);
             handleButton(false, 1, true);
@@ -233,7 +233,7 @@ class $modify(AIGameLayer, GJBaseGameLayer) {
         auto pl = PlayLayer::get();
         if (!g_ai.active || !pl || static_cast<GJBaseGameLayer*>(pl) != this) return;
         static_cast<AIPlayLayer*>(pl)->updateAILabel();
-        if (g_ai.episodeOver || pl->m_isDead) return;
+        if (g_ai.episodeOver || m_player1->m_isDead) return;
 
         auto p = m_player1;
         float x = p->getPositionX();
