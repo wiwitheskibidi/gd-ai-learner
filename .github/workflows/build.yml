@@ -17,6 +17,9 @@ jobs:
       - uses: geode-sdk/build-geode-mod@main
         with:
           path: mod
+          sdk: v5.11.2
+          bindings: geode-sdk/bindings
+          bindings-ref: 1012fcb37243286184d319404b15fd929098fd47
           combine: true
           target: ${{ matrix.target }}
 
@@ -44,7 +47,10 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: ai-mod
-          path: mod-out
+          path: mod
+          sdk: v5.11.2
+          bindings: geode-sdk/bindings
+          bindings-ref: 1012fcb37243286184d319404b15fd929098fd47-out
 
       - name: Bundle mod into the APK
         run: |
