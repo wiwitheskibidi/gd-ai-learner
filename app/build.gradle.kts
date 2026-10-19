@@ -298,6 +298,18 @@ android {
         }
     }
 
+    // Fixed debug key (committed on purpose) so every CI build installs as an
+    // update over the previous one instead of failing on a signature mismatch.
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storeType = "pkcs12"
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
