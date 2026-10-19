@@ -16,7 +16,7 @@ jobs:
         # BlueStacks (Pie64/Android 11) is 64-bit; add Android32 back for old 32-bit phones
         target: [Android64]
     name: Mod (${{ matrix.target }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: geode-sdk/build-geode-mod@main
@@ -32,7 +32,7 @@ jobs:
 
   apk:
     name: Build APK
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: mod
     steps:
       - uses: actions/checkout@v4
