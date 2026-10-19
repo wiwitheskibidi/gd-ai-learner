@@ -130,13 +130,17 @@ static void applyTimeScale(bool on) {
 class $modify(AIPauseLayer, PauseLayer) {
     void customSetup() {
         PauseLayer::customSetup();
-        auto menu = this->getChildByID("right-button-menu");
-        if (!menu) return;
-        auto spr = ButtonSprite::create(g_ai.active ? "Stop AI" : "AI Learn", "goldFont.fnt", "GJ_button_01.png", 0.7f);
+        // Our own menu, so the button doesn't depend on the node-ids mod being installed.
+        auto spr = ButtonSprite::create(g_ai.active ? "Stop AI" : "AI Learn", "goldFont.fnt", "GJ_button_01.png", 0.8f);
         auto btn = CCMenuItemSpriteExtra::create(spr, this, menu_selector(AIPauseLayer::onToggleAI));
         btn->setID("ai-learn-button"_spr);
+        auto menu = CCMenu::create();
+        menu->setID("ai-learn-menu"_spr);
         menu->addChild(btn);
-        menu->updateLayout();
+        auto win = CCDirector::get()->getWinSize();
+        menu->setPosition({win.width - spr->getContentSize().width / 2 - 10.f, 30.f});
+        menu->setZOrder(100);
+        this->addChild(menu);
     }
 
     void onToggleAI(CCObject*) {
