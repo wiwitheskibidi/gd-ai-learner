@@ -17,8 +17,6 @@ jobs:
       - uses: geode-sdk/build-geode-mod@main
         with:
           path: mod
-          bindings: geode-sdk/bindings
-          bindings-ref: main
           combine: true
           target: ${{ matrix.target }}
 
