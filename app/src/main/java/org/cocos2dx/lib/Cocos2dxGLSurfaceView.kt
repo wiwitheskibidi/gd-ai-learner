@@ -1,0 +1,712 @@
+package org.cocos2dx.lib
+
+import android.app.Activity
+import android.content.Context
+import android.hardware.input.InputManager
+import android.opengl.GLSurfaceView
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.os.Message
+import android.text.InputType
+import android.view.InputDevice
+import android.view.KeyEvent
+import android.view.MotionEvent
+import android.view.Surface
+import android.view.WindowInsets
+import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputMethodManager
+import androidx.annotation.RequiresApi
+import androidx.appcompat.widget.AppCompatEditText
+import com.customRobTop.BaseRobTopActivity
+import com.geode.launcher.utils.GeodeUtils
+import kotlin.math.abs
+
+private const val HANDLER_OPEN_IME_KEYBOARD = 2
+private const val HANDLER_CLOSE_IME_KEYBOARD = 3
+private const val MS_TO_NS = 1_000_000
+private const val SEC_TO_NS = 1_000_000_000.0
+
+fun inputTypeForFlags(i: Int): Int {
+    if ((i and BaseRobTopActivity.KEYBOARD_INPUT_NUMERIC) != 0) {
+        return InputType.TYPE_NUMBER_FLAG_DECIMAL or InputType.TYPE_NUMBER_FLAG_SIGNED or InputType.TYPE_CLASS_NUMBER
+    }
+
+    if ((i and BaseRobTopActivity.KEYBOARD_INPUT_PASSWORD) != 0) {
+        return InputType.TYPE_TEXT_VARIATION_PASSWORD or InputType.TYPE_CLASS_TEXT
+    }
+
+    if ((i and BaseRobTopActivity.KEYBOARD_INPUT_MULTILINE) != 0) {
+        return InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES or InputType.TYPE_CLASS_TEXT
+    }
+
+    return InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS or InputType.TYPE_CLASS_TEXT
+}
+
+class Cocos2dxGLSurfaceView(context: Context) : GLSurfaceView(context) {
+    companion object {
+        lateinit var cocos2dxGLSurfaceView: Cocos2dxGLSurfaceView
+        private lateinit var handler: Handler
+        private lateinit var cocos2dxTextInputWrapper: Cocos2dxTextInputWrapper
+
+        private var keyboardVisible = false
+        private var keyboardHeight = 0
+
+        private var keyboardHideCheck = Runnable {
+            if (keyboardVisible) {
+                return@Runnable
+            }
+
+            cocos2dxGLSurfaceView.queueEvent {
+                cocos2dxGLSurfaceView.cocos2dxRenderer.handleTextClosed()
+            }
+        }
+
+        @JvmStatic
+        fun openIMEKeyboard() {
+            val msg = Message()
+            msg.what = HANDLER_OPEN_IME_KEYBOARD
+            msg.obj = cocos2dxGLSurfaceView.getContentText()
+            handler.sendMessage(msg)
+        }
+
+        @JvmStatic
+        fun closeIMEKeyboard() {
+            val msg = Message()
+            msg.what = HANDLER_CLOSE_IME_KEYBOARD
+            handler.sendMessage(msg)
+        }
+
+        fun queueAccelerometer(x: Float, y: Float, z: Float, timestamp: Long) =
+            cocos2dxGLSurfaceView.queueEvent {
+                Cocos2dxAccelerometer.onSensorChanged(x, y, z, timestamp)
+            }
+
+        @RequiresApi(Build.VERSION_CODES.R)
+        fun onKeyboardInsets(windowInsets: WindowInsets) {
+            if (!cocos2dxGLSurfaceView.sendNewCocosEvents) {
+                return
+            }
+
+            val visible = windowInsets.isVisible(WindowInsets.Type.ime())
+            val offsetHeight = if (visible) windowInsets.getInsets(WindowInsets.Type.ime()).bottom else 0
+
+            if (visible == keyboardVisible && offsetHeight == keyboardHeight) {
+                return
+            }
+
+            keyboardVisible = visible
+            keyboardHeight = offsetHeight
+
+            handler.removeCallbacks(keyboardHideCheck)
+            if (!visible) {
+                handler.postDelayed(keyboardHideCheck, 150L)
+            } else {
+                cocos2dxGLSurfaceView.cocos2dxRenderer.handleKeyboardWillShow(keyboardHeight)
+            }
+        }
+    }
+
+    private lateinit var cocos2dxRenderer: Cocos2dxRenderer
+    var useKeyboardEvents = false
+        set(value) {
+            field = value
+            cocos2dxRenderer.sendResizeEvents = value
+        }
+
+    var sendTimestampEvents = false
+    var manualBackEvents = false
+    var controllerEventsEnabled = false
+        private set
+    var supportsResizeEvents = false
+
+    // 2.209+ events for keyboard and such
+    var sendNewCocosEvents = false
+
+    var cocos2dxEditText: AppCompatEditText? = null
+        set(value) {
+            field = value
+
+            field?.setOnEditorActionListener(cocos2dxTextInputWrapper)
+            requestFocus()
+        }
+
+    fun usesInlineKeyboard(): Boolean {
+        if (!sendNewCocosEvents) return false
+
+        return Build.VERSION.SDK_INT >= 30
+    }
+
+    fun imeOptionsForFlags(i: Int): Int {
+        val i2 = if ((i and BaseRobTopActivity.KEYBOARD_INPUT_MULTILINE) == 0 || !usesInlineKeyboard())
+            EditorInfo.IME_ACTION_DONE else EditorInfo.IME_ACTION_NONE
+
+        return if (usesInlineKeyboard())
+            EditorInfo.IME_FLAG_NO_FULLSCREEN or EditorInfo.IME_FLAG_NO_EXTRACT_UI or i2
+        else i2
+    }
+
+    fun initView() {
+        setEGLContextClientVersion(2)
+        isFocusableInTouchMode = true
+        preserveEGLContextOnPause = true
+        cocos2dxGLSurfaceView = this
+        cocos2dxTextInputWrapper = Cocos2dxTextInputWrapper(this)
+        Cocos2dxGLSurfaceView.handler = object : Handler(Looper.getMainLooper()) {
+            override fun handleMessage(msg: Message) {
+                when (msg.what) {
+                    HANDLER_OPEN_IME_KEYBOARD -> {
+                        if (cocos2dxEditText?.requestFocus() == true) {
+                            cocos2dxEditText?.apply {
+                                removeTextChangedListener(cocos2dxTextInputWrapper)
+
+                                if (sendNewCocosEvents) {
+                                    inputType = inputTypeForFlags(BaseRobTopActivity.curKeyboardInputFlags)
+                                    imeOptions = imeOptionsForFlags(BaseRobTopActivity.curKeyboardInputFlags)
+                                }
+
+                                setText("")
+                                val text = msg.obj as String
+                                append(text)
+                                cocos2dxTextInputWrapper.setOriginText(text)
+                                addTextChangedListener(
+                                    cocos2dxTextInputWrapper
+                                )
+                            }
+                            (context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).showSoftInput(
+                                cocos2dxEditText,
+                                0
+                            )
+                            return
+                        }
+                        return
+                    }
+                    HANDLER_CLOSE_IME_KEYBOARD -> {
+                        cocos2dxEditText?.apply {
+                            removeTextChangedListener(cocos2dxTextInputWrapper)
+                            (context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(
+                                windowToken,
+                                0
+                            )
+                        }
+
+                        requestFocus()
+
+                        queueEvent {
+                            cocos2dxRenderer.handleTextClosed()
+                        }
+                        return
+                    }
+                    else -> return
+                }
+            }
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.R)
+    fun updateRefreshRate() {
+        val chosenDisplay = display.supportedModes?.maxByOrNull { it.refreshRate }
+        if (chosenDisplay == null) {
+            println("updateRefreshRate failed to find a display to maximize refresh rate...")
+            return
+        }
+
+        val chosenRefreshRate = chosenDisplay.refreshRate
+
+        println("updateRefreshRate: selecting refresh rate of ${chosenDisplay.refreshRate} (display ${chosenDisplay.modeId})")
+
+        holder.surface.setFrameRate(chosenRefreshRate, Surface.FRAME_RATE_COMPATIBILITY_DEFAULT)
+        if (isAttachedToWindow) {
+            (context as Activity).window.attributes.preferredRefreshRate = chosenRefreshRate
+        }
+    }
+
+    override fun onPause() {
+        queueEvent { cocos2dxRenderer.handleOnPause() }
+        renderMode = RENDERMODE_WHEN_DIRTY
+        super.onPause()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        renderMode = RENDERMODE_CONTINUOUSLY
+        queueEvent { cocos2dxRenderer.handleOnResume() }
+    }
+
+    private fun sendNextEventTimestamp(timestamp: Long) {
+        if (sendTimestampEvents)
+            GeodeUtils.setNextInputTimestamp(timestamp)
+    }
+
+    override fun onTouchEvent(motionEvent: MotionEvent): Boolean {
+        val pointerNumber = motionEvent.pointerCount
+        val ids = IntArray(pointerNumber)
+        val xs = FloatArray(pointerNumber)
+        val ys = FloatArray(pointerNumber)
+        val timestamp = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+            motionEvent.eventTimeNanos else motionEvent.eventTime * MS_TO_NS
+        val timestampSec = timestamp / SEC_TO_NS
+
+        for (i in 0 until pointerNumber) {
+            ids[i] = motionEvent.getPointerId(i)
+            xs[i] = motionEvent.getX(i)
+            ys[i] = motionEvent.getY(i)
+        }
+        return when (motionEvent.action and MotionEvent.ACTION_MASK) {
+            MotionEvent.ACTION_DOWN -> {
+                val idDown = motionEvent.getPointerId(0)
+                val xDown = xs[0]
+                val f = ys[0]
+                queueEvent {
+                    sendNextEventTimestamp(timestamp)
+
+                    if (controllerEventsEnabled)
+                        GeodeUtils.internalTouchEvent(
+                            timestamp, motionEvent.deviceId, motionEvent.source,
+                            // slice here to convert to single element array
+                            GeodeUtils.TOUCH_TYPE_BEGIN, ids.sliceArray(0..0), xs.sliceArray(0..0), ys.sliceArray(0..0)
+                        )
+                    else
+                        cocos2dxRenderer.handleActionDown(idDown, xDown, f, timestampSec)
+                }
+                true
+            }
+            MotionEvent.ACTION_UP -> {
+                val idUp = motionEvent.getPointerId(0)
+                val f2 = xs[0]
+                val f3 = ys[0]
+                queueEvent {
+                    sendNextEventTimestamp(timestamp)
+
+                    if (controllerEventsEnabled)
+                        GeodeUtils.internalTouchEvent(
+                            timestamp, motionEvent.deviceId, motionEvent.source,
+                            GeodeUtils.TOUCH_TYPE_END, ids.sliceArray(0..0), xs.sliceArray(0..0), ys.sliceArray(0..0)
+                        )
+                    else
+                        cocos2dxRenderer.handleActionUp(idUp, f2, f3, timestampSec)
+                }
+                true
+            }
+            MotionEvent.ACTION_MOVE -> {
+                queueEvent {
+                    sendNextEventTimestamp(timestamp)
+
+                    if (controllerEventsEnabled)
+                        GeodeUtils.internalTouchEvent(
+                            timestamp, motionEvent.deviceId, motionEvent.source,
+                            GeodeUtils.TOUCH_TYPE_MOVE, ids, xs, ys
+                        )
+                    else
+                        cocos2dxRenderer.handleActionMove(ids, xs, ys, timestampSec)
+                }
+                true
+            }
+            MotionEvent.ACTION_CANCEL -> {
+                queueEvent {
+                    sendNextEventTimestamp(timestamp)
+
+                    if (controllerEventsEnabled)
+                        GeodeUtils.internalTouchEvent(
+                            timestamp, motionEvent.deviceId, motionEvent.source,
+                            GeodeUtils.TOUCH_TYPE_CANCEL, ids, xs, ys
+                        )
+                    else
+                        cocos2dxRenderer.handleActionCancel(ids, xs, ys, timestampSec)
+                }
+                true
+            }
+            MotionEvent.ACTION_POINTER_DOWN -> {
+                val indexPointerDown = motionEvent.action shr 8
+                val idPointerDown = motionEvent.getPointerId(indexPointerDown)
+                val xPointerDown = motionEvent.getX(indexPointerDown)
+                val y = motionEvent.getY(indexPointerDown)
+                queueEvent {
+                    sendNextEventTimestamp(timestamp)
+
+                    if (controllerEventsEnabled)
+                        GeodeUtils.internalTouchEvent(
+                            timestamp, motionEvent.deviceId, motionEvent.source,
+                            GeodeUtils.TOUCH_TYPE_BEGIN, intArrayOf(idPointerDown), floatArrayOf(xPointerDown), floatArrayOf(y)
+                        )
+                    else
+                        cocos2dxRenderer.handleActionDown(idPointerDown, xPointerDown, y, timestampSec)
+                }
+                true
+            }
+            MotionEvent.ACTION_POINTER_UP -> {
+                val indexPointUp = motionEvent.action shr 8
+                val idPointerUp = motionEvent.getPointerId(indexPointUp)
+                val xPointerUp = motionEvent.getX(indexPointUp)
+                val y2 = motionEvent.getY(indexPointUp)
+                queueEvent {
+                    sendNextEventTimestamp(timestamp)
+
+                    if (controllerEventsEnabled)
+                        GeodeUtils.internalTouchEvent(
+                            timestamp, motionEvent.deviceId, motionEvent.source,
+                            GeodeUtils.TOUCH_TYPE_END, intArrayOf(idPointerUp), floatArrayOf(xPointerUp), floatArrayOf(y2)
+                        )
+                    else
+                        cocos2dxRenderer.handleActionUp(idPointerUp, xPointerUp, y2, timestampSec)
+                }
+                true
+            }
+            else -> true
+        }
+    }
+
+    override fun onSizeChanged(
+        newSurfaceWidth: Int,
+        newSurfaceHeight: Int,
+        oldSurfaceWidth: Int,
+        oldSurfaceHeight: Int
+    ) {
+        if (!isInEditMode) {
+            cocos2dxRenderer.setScreenWidthAndHeight(newSurfaceWidth, newSurfaceHeight)
+        }
+
+        if (supportsResizeEvents) {
+            queueEvent {
+                GeodeUtils.resizeSurface(newSurfaceWidth, newSurfaceHeight)
+            }
+        }
+    }
+
+    private fun queueKeyboardEvent(keyCode: Int, event: KeyEvent, down: Boolean): Boolean {
+        val keypadCode = keyCode == KeyEvent.KEYCODE_MENU || keyCode == KeyEvent.KEYCODE_BACK
+        if (event.isSystem && !keypadCode) {
+            return false
+        }
+
+        if (keypadCode && BaseRobTopActivity.blockBackButton) {
+            return true
+        }
+
+        queueEvent {
+            sendNextEventTimestamp(event.eventTime * MS_TO_NS)
+        }
+
+        if (useKeyboardEvents) {
+            if (down) {
+                queueEvent {
+                    GeodeUtils.nativeKeyDown(keyCode, event.modifiers, event.repeatCount != 0)
+                }
+            } else {
+                queueEvent {
+                    GeodeUtils.nativeKeyUp(keyCode, event.modifiers)
+                }
+            }
+        }
+
+        if (controllerEventsEnabled) {
+            queueEvent {
+                GeodeUtils.internalKeyEvent(
+                    event.eventTime * MS_TO_NS,
+                    event.deviceId,
+                    event.source,
+                    event.keyCode,
+                    event.modifiers,
+                    down,
+                    event.repeatCount
+                )
+            }
+        }
+
+        // geode events override native callbacks
+        if (useKeyboardEvents || controllerEventsEnabled) {
+            return true
+        }
+
+        if (sendNewCocosEvents) {
+            if (KeyEvent.isGamepadButton(keyCode)) {
+                return false
+            }
+
+            if (keyCode == KeyEvent.KEYCODE_ESCAPE && BaseRobTopActivity.blockBackButton) {
+                return true
+            }
+
+            // messy logic
+            val isRepeat = event.repeatCount > 0
+            if (keypadCode) {
+                if (down) {
+                    if (isRepeat || BaseRobTopActivity.blockBackButton) {
+                        return true
+                    }
+
+                    queueEvent {
+                        cocos2dxRenderer.handleKeyDown(keyCode)
+                    }
+
+                    return true
+                } else {
+                    return false
+                }
+            }
+
+            val eventTimestamp = event.eventTime / 1000.0
+
+            val shiftPressed = event.isShiftPressed
+            val ctrlPressed = event.isCtrlPressed
+            val altPressed = event.isAltPressed
+
+            queueEvent {
+                cocos2dxRenderer.handleKeyboardEvent(
+                    keyCode, down, isRepeat, eventTimestamp,
+                    shiftPressed, ctrlPressed, altPressed
+                )
+            }
+
+            return true
+        }
+
+        return false
+    }
+
+    private fun legacyKeyDown(keyCode: Int, keyEvent: KeyEvent): Boolean {
+        return when (keyCode) {
+            KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_MENU -> {
+                if (keyEvent.repeatCount != 0 || BaseRobTopActivity.blockBackButton) {
+                    return true
+                }
+                queueEvent { cocos2dxRenderer.handleKeyDown(keyCode) }
+                true
+            }
+            else -> super.onKeyDown(keyCode, keyEvent)
+        }
+    }
+
+    fun sendKeyBack() {
+        if (cocos2dxEditText?.isFocused == true) {
+            requestFocus()
+        }
+
+        if (BaseRobTopActivity.blockBackButton) {
+            return
+        }
+
+        val currentTime = System.nanoTime()
+        queueEvent {
+            sendNextEventTimestamp(currentTime)
+
+            if (controllerEventsEnabled) {
+                GeodeUtils.internalKeyEvent(
+                    currentTime,
+                    -1,
+                    InputDevice.SOURCE_ANY,
+                    KeyEvent.KEYCODE_BACK,
+                    0,
+                    true,
+                    0
+                )
+                GeodeUtils.internalKeyEvent(
+                    currentTime,
+                    -1,
+                    InputDevice.SOURCE_ANY,
+                    KeyEvent.KEYCODE_BACK,
+                    0,
+                    false,
+                    0
+                )
+            }
+
+            if (useKeyboardEvents) {
+                GeodeUtils.nativeKeyDown(KeyEvent.KEYCODE_BACK, 0, false)
+                GeodeUtils.nativeKeyUp(KeyEvent.KEYCODE_BACK, 0)
+            } else if (!controllerEventsEnabled) {
+                cocos2dxRenderer.handleKeyDown(KeyEvent.KEYCODE_BACK)
+            }
+        }
+    }
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        if (!queueKeyboardEvent(keyCode, event, true)) {
+            return legacyKeyDown(keyCode, event)
+        }
+
+        return true
+    }
+
+    override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
+        if (!queueKeyboardEvent(keyCode, event, false)) {
+            return super.onKeyUp(keyCode, event)
+        }
+
+        return true
+    }
+
+    // i'm lazy.
+    // https://developer.android.com/develop/ui/views/touch-and-input/game-controllers/controller-input
+    private fun getCenteredAxis(
+        event: MotionEvent,
+        device: InputDevice,
+        axis: Int,
+        historyPos: Int
+    ): Float {
+        device.getMotionRange(axis, event.source)?.apply {
+            val value: Float = if (historyPos < 0) {
+                event.getAxisValue(axis)
+            } else {
+                event.getHistoricalAxisValue(axis, historyPos)
+            }
+
+            if (abs(value) > flat) {
+                return value
+            }
+        }
+        return 0.0f
+    }
+
+    private fun getJoystickMotion(event: MotionEvent, axisHorizontal: Int, axisVertical: Int): Pair<FloatArray, FloatArray> {
+        val positionChangesX = ArrayList<Float>()
+        val positionChangesY = ArrayList<Float>()
+
+        val inputDevice = event.device
+
+        (0 until event.historySize).forEach { i ->
+            val x = getCenteredAxis(event, inputDevice, axisHorizontal, i)
+            val y = getCenteredAxis(event, inputDevice, axisVertical, i)
+            positionChangesX.add(x)
+            positionChangesY.add(y)
+        }
+
+        val x = getCenteredAxis(event, inputDevice, axisHorizontal, -1)
+        val y = getCenteredAxis(event, inputDevice, axisVertical, -1)
+        positionChangesX.add(x)
+        positionChangesY.add(y)
+
+        return Pair(positionChangesX.toFloatArray(), positionChangesY.toFloatArray())
+    }
+
+    private fun getJoystickMotion(event: MotionEvent, axis: Int): FloatArray {
+        val positionChanges = ArrayList<Float>()
+
+        val inputDevice = event.device
+
+        (0 until event.historySize).forEach { i ->
+            val x = getCenteredAxis(event, inputDevice, axis, i)
+            positionChanges.add(x)
+        }
+
+        val x = getCenteredAxis(event, inputDevice, axis, -1)
+        positionChanges.add(x)
+
+        return positionChanges.toFloatArray()
+    }
+
+    override fun onGenericMotionEvent(event: MotionEvent?): Boolean {
+        val hasGeodeEvents = useKeyboardEvents || controllerEventsEnabled
+        if (!hasGeodeEvents && !sendNewCocosEvents) {
+            return super.onGenericMotionEvent(event)
+        }
+
+        if (event?.action == MotionEvent.ACTION_SCROLL) {
+            val mouseX = event.x
+            val mouseY = event.y
+
+            val scrollX = event.getAxisValue(MotionEvent.AXIS_HSCROLL)
+            val scrollY = event.getAxisValue(MotionEvent.AXIS_VSCROLL)
+            val timestamp = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+                event.eventTimeNanos else event.eventTime * MS_TO_NS
+
+            queueEvent {
+                sendNextEventTimestamp(timestamp)
+
+                if (useKeyboardEvents) {
+                    GeodeUtils.nativeActionScroll(scrollX, scrollY)
+                }
+
+                if (controllerEventsEnabled) {
+                    GeodeUtils.internalScrollEvent(timestamp, event.deviceId, event.source, scrollX, scrollY, mouseX, mouseY)
+                }
+
+                if (!hasGeodeEvents && sendNewCocosEvents) {
+                    cocos2dxRenderer.handleScroll(mouseX, mouseY, scrollY, scrollX)
+                }
+            }
+
+            return true
+        }
+
+        if (controllerEventsEnabled && event?.action == MotionEvent.ACTION_MOVE && event.source and InputDevice.SOURCE_JOYSTICK == InputDevice.SOURCE_JOYSTICK) {
+            val (motionLeftX, motionLeftY) = getJoystickMotion(event, MotionEvent.AXIS_X, MotionEvent.AXIS_Y)
+            val (motionRightX, motionRightY) = getJoystickMotion(event, MotionEvent.AXIS_Z, MotionEvent.AXIS_RZ)
+            val (motionDPadX, motionDPadY) = getJoystickMotion(event, MotionEvent.AXIS_HAT_X, MotionEvent.AXIS_HAT_Y)
+
+            val motionLTrigger = getJoystickMotion(event, MotionEvent.AXIS_LTRIGGER)
+            val motionRTrigger = getJoystickMotion(event, MotionEvent.AXIS_RTRIGGER)
+
+            // i'm sure this is great for performance
+            val timestamp = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+                event.eventTimeNanos else event.eventTime * MS_TO_NS
+
+            queueEvent {
+                GeodeUtils.internalJoystickEvent(
+                    timestamp, event.deviceId, event.source,
+                    motionLeftX, motionLeftY,
+                    motionRightX, motionRightY,
+                    motionDPadX, motionDPadY,
+                    motionLTrigger, motionRTrigger
+                )
+            }
+
+            return true
+        }
+
+        return super.onGenericMotionEvent(event)
+    }
+
+    fun setCocos2dxRenderer(renderer: Cocos2dxRenderer) {
+        this.cocos2dxRenderer = renderer
+        setRenderer(this.cocos2dxRenderer)
+    }
+
+    private fun getContentText(): String {
+        return cocos2dxRenderer.getContentText()
+    }
+
+    fun insertText(text: String) {
+        queueEvent { cocos2dxRenderer.handleInsertText(text) }
+    }
+
+    fun deleteBackward() {
+        queueEvent { cocos2dxRenderer.handleDeleteBackward() }
+    }
+
+    fun enableControllerEvents() {
+        if (controllerEventsEnabled) {
+            return
+        }
+
+        controllerEventsEnabled = true
+
+        val inputManager = context.getSystemService(Context.INPUT_SERVICE) as InputManager
+        inputManager.registerInputDeviceListener(InputListener, null)
+    }
+
+    fun disableControllerEvents() {
+        if (!controllerEventsEnabled) {
+            return
+        }
+
+        controllerEventsEnabled = true
+
+        val inputManager = context.getSystemService(Context.INPUT_SERVICE) as InputManager
+        inputManager.unregisterInputDeviceListener(InputListener)
+    }
+
+    object InputListener : InputManager.InputDeviceListener {
+        override fun onInputDeviceAdded(deviceId: Int) {
+            GeodeUtils.inputDeviceAdded(deviceId)
+        }
+
+        override fun onInputDeviceChanged(deviceId: Int) {
+            GeodeUtils.inputDeviceChanged(deviceId)
+        }
+
+        override fun onInputDeviceRemoved(deviceId: Int) {
+            GeodeUtils.inputDeviceRemoved(deviceId)
+        }
+    }
+}

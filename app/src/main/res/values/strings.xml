@@ -1,0 +1,349 @@
+<resources>
+    <string name="app_name" translatable="false">GD AI Learner</string>
+    <string name="no_activity_found">No activity found for this action.</string>
+
+    <!-- MainActivity strings -->
+    <string name="game_not_found">Geometry Dash was not found.\nThe full version of the game is required.</string>
+    <string name="launcher_launch">Launch</string>
+    <string name="launcher_settings">Settings</string>
+    <string name="launcher_download">Download</string>
+    <string name="launcher_install">Install</string>
+    <string name="launcher_title">GD AI Learner</string>
+    <string name="launcher_logo_alt">geode logo</string>
+    <string name="launcher_launch_icon_alt">play icon</string>
+    <string name="launcher_download_icon_alt">download icon</string>
+    <string name="launcher_download_game">Download game</string>
+    <string name="launcher_download_32bit">Download the 32-bit version of launcher.</string>
+    <string name="launcher_download_universal">Download the non 32-bit version of launcher.</string>
+    <string name="launcher_settings_icon_alt">settings icon</string>
+    <string name="launcher_retry_icon_alt">retry icon</string>
+    <string name="geode_download_title">Geode is not installed.</string>
+    <string name="game_outdated">A Geometry Dash update is required.\nYou currently have update %1$s.</string>
+    <string name="geode_download_description">Geode is downloading. Please wait.</string>
+    <plurals name="automatically_load_countdown">
+        <item quantity="one">Automatically launching game in %1$d second.</item>
+        <item quantity="other">Automatically launching game in %1$d seconds.</item>
+    </plurals>
+    <string name="launcher_warning_icon_alt">warning</string>
+    <string name="launcher_error_icon_alt">error</string>
+    <string name="launcher_unsupported_version_title">Unsupported version</string>
+    <string name="launcher_outdated_version_description">
+        The current version of Geometry Dash is not compatible with the version supported by the launcher (%2$s). You must update Geometry Dash to fix this.\nLaunch will continue, but crashes may occur!
+    </string>
+    <string name="launcher_unsupported_version_description">
+        The current version of Geometry Dash is not compatible with the version supported by the launcher. A launcher update is required to fix this.\nLaunch will continue, but crashes may occur!
+    </string>
+
+    <string name="launcher_game_update_required_short">A Geometry Dash update is required.</string>
+    <string name="launcher_game_update_required">The currently installed version of Geometry Dash is no longer supported. Please update Geometry Dash to version %1$s to continue receiving Geode updates.</string>
+
+    <string name="launcher_update_available">A new launcher update is available!</string>
+    <string name="launcher_update_dismiss">Dismiss</string>
+    <string name="launcher_update_view">View</string>
+    <string name="launcher_update_external_link">View in browser</string>
+    <string name="launcher_update_name">Geode Launcher v%1$s</string>
+    <string name="launcher_update_changelog">Changelog</string>
+    <string name="launcher_update_released">Released %1$s</string>
+    <string name="safe_mode_enable_title">Enable safe mode?</string>
+    <string name="safe_mode_enable_description">Safe mode disables loading of all mods, allowing one to remove problematic mods or diagnose crashes. If you\'re not experiencing issues with Geode, you should probably not be using safe mode.</string>
+    <string name="launcher_failed_to_load">Geode failed to load.</string>
+    <string name="launcher_crashed">Geode crashed.</string>
+    <string name="launcher_error_more">Help</string>
+    <string name="launcher_error_details">Error details</string>
+    <string name="launcher_error_view_logs">View logs</string>
+    <string name="launcher_error_copy_error_alt">Copy</string>
+    <string name="launcher_error_copy">Copy details</string>
+    <string name="launcher_error_view_details">View details</string>
+    <string name="launcher_error_export_crash">Share crash</string>
+    <string name="launcher_error_export_missing">No crash dump was found!</string>
+    <string name="launcher_error_device_info">Android %2$s, %1$s (%5$s)\nGD %4$s, Geode %3$s + v%6$s</string>
+
+    <string name="launcher_notification_settings">Launcher Settings</string>
+    <string name="launcher_notification_update_failed">Failed to update Geode.</string>
+    <string name="launcher_notification_update_success">Geode updated!</string>
+    <string name="launcher_notification_compatibility">Unsupported Geometry Dash version.</string>
+    <string name="launcher_notification_compatibility_description">An update is required to receive Geode updates.</string>
+    <string name="launcher_notification_forwards_compatibility_description">Geode is currently unavailable.</string>
+    <string name="launcher_notification_forwards_compatibility">Unsupported Geometry Dash version.</string>
+
+    <string name="launcher_notification_update_cta">Tap for more information.</string>
+
+    <string name="launcher_self_update_failed_title">Update failed</string>
+
+    <string name="launcher_self_update_failed">Failed to install launcher update: %1$s.</string>
+    <string name="launcher_update_download_failed">Downloading update failed: %1$s</string>
+    <string name="launcher_self_update_progress">Installing update…</string>
+
+    <string name="launcher_starting_game">Starting Geometry Dash…</string>
+    <string name="launcher_downloading_update">Downloading update…</string>
+    <string name="launcher_downloading_update_details">(%1$s/%2$s)</string>
+    <string name="launcher_cancelled_manual">Launch paused.</string>
+    <string name="launcher_cancelled_navigated_away">Launch paused.</string>
+    <string name="launcher_cancelled_crash">Launch paused due to a crash.</string>
+    <string name="launcher_cancelled_crash_instant">Geode crashed.</string>
+    <string name="launcher_cancelled_error">Geode cannot be used.</string>
+    <string name="launcher_cancelled_outdated">Geometry Dash version %1$s is required.</string>
+    <string name="launcher_cancelled_restart">Restart</string>
+    <string name="launcher_cancelled_resume">Resume</string>
+    <string name="launcher_cancelled_retry">Retry</string>
+    <string name="launcher_cancelled_help_alt">Help</string>
+    <string name="launcher_in_safe_mode">Starting in safe mode…</string>
+
+    <!-- Updater strings -->
+    <string name="release_fetch_failed">Update failed.\n%1$s</string>
+    <string name="release_fetch_no_releases">No updates found.</string>
+    <string name="release_fetch_in_progress">Checking for new releases…</string>
+    <string name="release_fetch_success">Geode updated!</string>
+    <string name="release_fetch_downloading">Downloading update… (%1$s/%2$s)</string>
+    <string name="release_fetch_downloading_indeterminate">Downloading update… (%1$s)</string>
+    <string name="release_fetch_cancelling">Cancelling update…</string>
+    <string name="release_fetch_no_internet">No internet found.</string>
+    <string name="release_fetch_cancelled">Update cancelled.</string>
+    <string name="release_fetch_button_retry">Retry</string>
+    <string name="release_fetch_button_cancel">Cancel</string>
+    <string name="release_fetch_try_later">Please try again later.</string>
+    <string name="release_fetch_manual_check_required">Externally managed library in use, please manually check for updates if you want to overwrite it.</string>
+
+    <string name="release_fetch_external_in_use_short">Update failed. External library in use.</string>
+    <string name="release_fetch_hash_validation_failed_short">Update failed. Integrity check failed.</string>
+    <string name="release_fetch_no_internet_short">Update failed. Internet not connected.</string>
+    <string name="release_fetch_generic_short">Update failed. Please try again later.</string>
+
+
+    <!-- GeometryDashActivity strings -->
+    <string name="load_failed_link_error">Failed to link libraries</string>
+    <string name="load_failed_link_error_description">Game libraries could not be found. Try to:</string>
+    <string name="load_failed_abi_error">The architecture of the launcher and Geometry Dash do not match. Try to:</string>
+    <string name="load_failed_generic_error">Failed to load Geode</string>
+    <string name="load_failed_generic_error_description">Uncaught error during game load. Try to:</string>
+    <string name="load_failed_crashed">Geode crashed</string>
+    <string name="load_failed_crashed_description">A crash was reported during the last session. Try to:</string>
+    <string name="load_failed_recommendation_reinstall">Reinstall Geometry Dash.</string>
+    <string name="load_failed_recommendation_switch_32bit_abi">Install the 32-bit version of the launcher.</string>
+    <string name="load_failed_recommendation_switch_64bit_abi">Install the non-32-bit version of the launcher.</string>
+    <string name="load_failed_recommendation_update">Verify that the latest versions of the launcher and Geometry Dash are installed.</string>
+    <string name="load_failed_recommendation_report">Report this issue to the developers.</string>
+    <string name="load_failed_recommendation_safe_mode">Use the safe mode button in Settings.</string>
+    <string name="load_failed_recommendation_dev_stl">Devs: If this is a locally built Geode version, please use the c++_shared ANDROID_STL!</string>
+
+    <string name="message_box_cancel">Cancel</string>
+    <string name="message_box_accept">OK</string>
+    <string name="message_box_continue">Continue</string>
+    <string name="missing_permissions">Missing required permissions for this action!</string>
+    <string name="no_file_selected">File selection cancelled.</string>
+    <string name="file_select_error">Failed to get file.</string>
+
+    <!-- SettingsActivity strings -->
+    <string name="title_activity_settings">Settings</string>
+    <string name="back_icon_alt">back</string>
+
+    <string name="export_folder_tag">Launcher external folder</string>
+    <string name="text_copied">Copied to clipboard.</string>
+
+    <string name="preference_category_testing">General</string>
+    <string name="preference_load_automatically_name">Automatically launch</string>
+    <string name="preference_load_automatically_description">Launches the game after a short delay.</string>
+    <string name="preferences_copy_external_button">Copy external files directory</string>
+    <string name="preferences_open_file_manager">Open file manager</string>
+    <string name="preferences_view_logs">View application logs</string>
+    <string name="preferences_view_crashes">View crash dumps</string>
+    <string name="preferences_view_geode_logs">View Geode logs</string>
+
+    <string name="preference_theme_name">Theme</string>
+    <string name="preference_theme_select">Select theme</string>
+    <string name="preference_theme_default">System default</string>
+    <string name="preference_theme_light">Light</string>
+    <string name="preference_theme_dark">Dark</string>
+    <string name="preference_black_background_name">Black background in dark theme</string>
+    <string name="preference_disable_styles">Disable custom styling</string>
+    <string name="preference_set_application_icon">Application icon</string>
+    <string name="preference_force_hrr">Force maximum refresh rate</string>
+    <string name="preference_enable_redesign">✨ Enable UI refresh</string>
+    <string name="preference_disable_redesign">Disable UI refresh</string>
+
+    <string name="preference_launch_delay">Launch delay</string>
+    <string name="preference_launch_delay_select">Select launch delay</string>
+    <string name="preference_launch_delay_instant">None</string>
+    <plurals name="preference_launch_delay_value">
+        <item quantity="one">%1$d second</item>
+        <item quantity="other">%1$d seconds</item>
+    </plurals>
+
+    <string name="preference_display_mode_name">Display mode</string>
+    <string name="preference_display_mode_select">Select display mode</string>
+    <string name="preference_display_mode_legacy">Limited (Custom)</string>
+    <string name="preference_display_mode_fullscreen">Edge-to-edge</string>
+    <string name="preference_display_mode_default">Default</string>
+
+    <string name="preference_custom_aspect_ratio_name">Aspect ratio</string>
+    <string name="preference_custom_aspect_ratio_description">Limits aspect ratio of the game.</string>
+    <string name="preference_custom_aspect_ratio_select">Select aspect ratio</string>
+    <string name="preference_custom_aspect_ratio_16x9">16:9</string>
+    <string name="preference_custom_aspect_ratio_16x10">16:10</string>
+    <string name="preference_custom_aspect_ratio_4x3">4:3</string>
+    <string name="preference_custom_aspect_ratio_1x1">1:1</string>
+
+    <string name="preference_screen_zoom_name">Screen zoom</string>
+    <string name="preference_screen_zoom_description">Reduces the size of the game window.</string>
+    <string name="preference_screen_zoom_select">Edit screen zoom</string>
+    <string name="preference_screen_zoom_fit_name">Fit to screen</string>
+
+    <string name="preference_limit_framerate_name">Limit max framerate</string>
+    <string name="preference_limit_framerate_description">Limits framerate during rendering.</string>
+    <string name="preference_limit_framerate_select">Edit maximum framerate</string>
+    <string name="preference_limit_framerate_default">Disabled</string>
+    <string name="preference_limit_framerate_label">Framerate</string>
+    <string name="preference_limit_framerate_suffix">FPS</string>
+    <string name="preference_limit_framerate_value">%1$d FPS</string>
+    <string name="preference_limit_framerate_error_max">This device supports at most %1$s FPS.</string>
+    <string name="preference_limit_framerate_error_min">Framerate must be at least %1$s FPS.</string>
+    <string name="preference_limit_framerate_subtract">Decrement</string>
+    <string name="preference_limit_framerate_add">Increment</string>
+    <string name="preference_limit_framerate_reset">Disable</string>
+
+    <string name="preference_category_updater">Updates</string>
+    <string name="preference_update_automatically_name">Enable automatic updates</string>
+    <string name="preference_release_channel_name">Use nightly release channel</string>
+
+    <string name="preference_category_gameplay">Gameplay</string>
+
+    <string name="preference_release_channel_tag_name">Release channel</string>
+    <string name="preference_release_channel_select">Select release channel</string>
+    <string name="preference_release_channel_stable">Stable</string>
+    <string name="preference_release_channel_beta">Pre-release</string>
+    <string name="preference_release_channel_nightly">Nightly</string>
+
+    <string name="preference_category_about">About</string>
+
+    <string name="preference_launcher_version_name">Android Launcher</string>
+    <string name="preference_launcher_version_description">v%1$s</string>
+    <string name="preference_launcher_version">Android Launcher v%1$s</string>
+    <string name="preference_enable_developer_again">You are already a developer!</string>
+
+    <string name="preference_loader_version_name">Geode</string>
+    <string name="preference_loader_version_description">%1$s</string>
+    <string name="preference_loader_version">Geode %1$s</string>
+
+    <string name="preference_game_version_name">Geometry Dash</string>
+    <string name="preference_game_version_description">%1$s (%2$s)</string>
+    <string name="preference_game_version">Geometry Dash %1$s (%2$s)</string>
+    <string name="preference_game_source_google">Google</string>
+    <string name="preference_game_source_amazon">Amazon</string>
+    <string name="preference_game_source_unknown">Unknown</string>
+
+    <string name="preference_architecture_name">Device</string>
+    <string name="preference_architecture_description">%1$s (%2$s)</string>
+    <string name="preference_architecture">%1$s (%2$s)</string>
+
+    <string name="preference_check_for_updates_button">Check for updates</string>
+    <string name="preference_check_for_updates_description">Last checked %1$s</string>
+    <string name="preference_check_for_updates_failed">Update failed.</string>
+    <string name="preference_check_for_updates_failed_action">Help</string>
+
+    <string name="preference_check_for_updates_help_title">Update failed.</string>
+    <string name="preference_check_for_updates_help_copy">Copy</string>
+
+    <string name="preference_check_for_updates_none_found">No updates found.</string>
+    <string name="preference_check_for_updates_success">Geode has been updated!</string>
+    <string name="preference_check_for_updates_downloading">Downloading update…</string>
+    <string name="preference_check_for_updates_no_internet">No internet found.</string>
+    <string name="preference_check_for_updates_already_updating">An update is already in progress!</string>
+
+    <string name="preference_category_developer">Advanced</string>
+
+    <string name="preference_launch_safe_mode">Launch in safe mode</string>
+    <string name="preference_launch_safe_mode_confirm_title">Start in safe mode?</string>
+
+    <string name="preference_backup_cloud">Backup save to cloud</string>
+    <string name="preference_backup_confirm_title">Backup save data?</string>
+    <string name="preference_backup_in_progress">Backing up data…</string>
+    <string name="preference_backup_cancelling">Cancelling backup…</string>
+
+    <string name="preference_backup_confirm_description">This will backup your save data using your in-game account. You can then access it on an unmodified version of the game through the account backup menu.\nContinuing will overwrite any save data you currently have on the Geometry Dash servers!</string>
+
+    <string name="preference_backup_save_missing">Failed to find save data.</string>
+    <string name="preference_backup_save_decode_failed">Failed to decode save file.</string>
+    <string name="preference_backup_save_too_large">Save file is too large.</string>
+    <string name="preference_backup_save_details_missing">Failed to find account information.</string>
+
+    <string name="preference_backup_success">Backup success!</string>
+    <string name="preference_backup_cancelled">Backup cancelled.</string>
+    <string name="preference_backup_failed_generic">An unknown error has occurred.</string>
+    <string name="preference_backup_failed_invalid_login">Invalid login information.</string>
+    <string name="preference_backup_failed_network">A network error has occurred. Please try again later.</string>
+
+    <string name="preference_backup_failed_title">Backup failed</string>
+
+    <string name="preference_backup_failed">Backup failed with error code %1$d.</string>
+
+    <string name="preference_launch_arguments_name">Launch arguments</string>
+    <string name="preference_launch_arguments_set_title">Set launch arguments</string>
+    <string name="preference_text_clear">Clear</string>
+
+    <string name="preference_disable_update_cache">Disable update cache</string>
+
+    <string name="preference_open_developer_options">Open developer options</string>
+    <string name="preference_developer_options_dialog_title">Enable developer options?</string>
+
+    <string name="preference_profiles">Profiles</string>
+    <string name="preference_profiles_create">Create profile</string>
+    <string name="preference_profiles_name">Change profile</string>
+    <string name="preference_profiles_select">Select profile</string>
+    <string name="preference_profiles_create_name">Profile name</string>
+    <string name="preference_profiles_create_action">Create</string>
+    <string name="preference_profiles_select_value">%1$s</string>
+    <string name="preference_profiles_current">Current profile: %1$s</string>
+    <string name="preference_profiles_create_info">This profile will be created at %1$s.</string>
+    <string name="preference_profiles_create_duplicate">A profile with this name already exists.</string>
+    <string name="preference_profiles_delete_alt">Delete</string>
+    <string name="preference_profiles_delete_undo_alt">Undo</string>
+
+    <!-- ApplicationLogsActivity strings -->
+    <string name="title_activity_application_logs">Application logs</string>
+    <string name="application_logs_no_logs">No logs available.</string>
+    <string name="application_logs_delete">Clear all</string>
+    <string name="application_logs_share">Share</string>
+    <string name="application_log_copy_label">Log message</string>
+    <string name="application_logs_more">More</string>
+    <string name="application_logs_export">Save to</string>
+    <string name="application_logs_level">Set log level</string>
+    <string name="application_logs_level_dialog_name">Set minimum log level</string>
+    <string name="application_logs_export_completed">Log export complete.</string>
+    <string name="application_logs_default_filename" translatable="false">launcher_logcat.txt</string>
+    <string name="application_logs_crash_only">Show crash buffer</string>
+    <string name="application_logs_crash_only_enabled_alt">Enabled</string>
+
+    <!-- DeveloperSettingsActivity strings -->
+    <string name="title_activity_developer_settings">Developer options</string>
+    <string name="preference_developer_mode">Enable developer options</string>
+    <string name="preference_developer_mode_about">Developer mode allows changing options that may make the game unstable. Please do not modify them unless you know what you\'re doing!\nThese options may change behavior, or be removed entirely in future updates.</string>
+    <string name="preference_developer_update_notice">Enabling developer mode automatically disallows the updater from overwriting custom loader builds.</string>
+
+    <string name="preference_override_exceptions_name">Custom exceptions fix symbols</string>
+    <string name="preference_override_exceptions_description">Uses exception_symbols.txt to patch</string>
+    <string name="preference_use_index_update_api">Use index release API</string>
+
+    <!-- CrashLogsActivity strings -->
+    <string name="title_activity_crash_logs">Crash dumps</string>
+    <string name="application_crashes_no_dumps">No crash dumps available.</string>
+    <string name="application_crashes_delete_one">Delete</string>
+    <string name="application_crashes_clear_indicator">Ignore last crash</string>
+    <string name="application_crashes_create_indicator">Fake crash</string>
+
+    <!-- ApplicationIconActivity strings -->
+    <string name="title_activity_application_icon">Application icons</string>
+    <string name="application_icon_set_failed">Failed to change icon.</string>
+    <string name="application_icon_default">Default</string>
+    <string name="application_icon_geode">Geode</string>
+    <string name="application_icon_pride">Pride</string>
+    <string name="application_icon_trans">Transgender</string>
+    <string name="application_icon_sapphire">Sapphire</string>
+    <string name="application_icon_green">Android</string>
+    <string name="application_icon_confirm">Change icon to %1$s?</string>
+    <string name="application_icon_confirm_description">Geode Launcher will close itself to change the application icon.</string>
+
+    <!-- GeodeLogsListingActivity strings -->
+    <string name="title_activity_geode_logs">Geode logs</string>
+    <string name="application_geode_logs_no_logs">No logs available.</string>
+    <string name="application_geode_logs_empty">File was empty.</string>
+</resources>

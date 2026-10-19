@@ -1,0 +1,282 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <queries>
+        <package android:name="com.robtopx.geometryjump" />
+    </queries>
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.LIGHTS" />
+
+    <uses-feature
+        android:name="android.hardware.wifi"
+        android:required="false" />
+    <uses-feature
+        android:glEsVersion="0x00020000"
+        android:required="true" />
+    <uses-feature
+        android:name="android.hardware.gamepad"
+        android:required="false" />
+
+    <application
+        android:allowBackup="true"
+        android:appCategory="game"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:enableOnBackInvokedCallback="true"
+        android:fullBackupContent="@xml/backup_rules"
+        android:hasFragileUserData="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:requestLegacyExternalStorage="true"
+        android:theme="@style/Theme.GeodeLauncher"
+        tools:targetApi="35">
+        <receiver
+            android:name=".InstallReceiver"
+            android:enabled="true"
+            android:exported="false" />
+        <activity
+            android:name=".preferences.DeveloperSettingsActivity"
+            android:exported="true"
+            android:label="@string/title_activity_developer_settings"
+            android:theme="@style/Theme.GeodeLauncher">
+
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="geode-launcher" android:host="developer-settings" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name=".preferences.ApplicationLogsActivity"
+            android:exported="true"
+            android:label="@string/title_activity_application_logs"
+            android:theme="@style/Theme.GeodeLauncher">
+
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="geode-launcher" android:host="logs" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name=".preferences.CrashLogsActivity"
+            android:exported="true"
+            android:label="@string/title_activity_crash_logs"
+            android:theme="@style/Theme.GeodeLauncher">
+
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="geode-launcher" android:host="crashes" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name=".preferences.GeodeLogsListingActivity"
+            android:exported="true"
+            android:label="@string/title_activity_geode_logs"
+            android:theme="@style/Theme.GeodeLauncher">
+
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="geode-launcher" android:host="geode-logs" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name=".preferences.TextViewActivity"
+            android:exported="false"
+            android:theme="@style/Theme.GeodeLauncher">
+        </activity>
+        <activity
+            android:name=".preferences.ApplicationIconActivity"
+            android:exported="false"
+            android:label="@string/title_activity_application_icon"
+            android:theme="@style/Theme.GeodeLauncher" />
+        <activity
+            android:name=".preferences.SettingsActivity"
+            android:exported="true"
+            android:label="@string/title_activity_settings"
+            android:theme="@style/Theme.GeodeLauncher">
+
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="geode-launcher" android:host="settings" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name=".GeometryDashActivity"
+            android:configChanges="fontScale|layoutDirection|density|smallestScreenSize|screenSize|uiMode|screenLayout|orientation|navigation|keyboardHidden|keyboard|locale"
+            android:exported="true"
+            android:hardwareAccelerated="true"
+            android:screenOrientation="landscape"
+            android:theme="@style/Theme.NoActionBar.Fullscreen"
+            android:windowSoftInputMode="stateAlwaysHidden">
+            <meta-data
+                android:name="android.app.lib_name"
+                android:value="cocos2dcpp" />
+        </activity>
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:theme="@style/Theme.GeodeLauncher">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="geode-launcher" android:host="main" />
+            </intent-filter>
+        </activity>
+
+        <activity-alias
+            android:name=".MainActivityTrans"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_trans"
+            android:label="@string/app_name"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="geode-launcher" android:host="main" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".MainActivityPride"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_pride"
+            android:label="@string/app_name"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="geode-launcher" android:host="main" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".MainActivitySapphire"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_sapphire"
+            android:label="@string/application_icon_sapphire"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="geode-launcher" android:host="main" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".MainActivityGeode"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_geode"
+            android:label="@string/app_name"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="geode-launcher" android:host="main" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".MainActivityGreen"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_green"
+            android:label="@string/app_name"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="geode-launcher" android:host="main" />
+            </intent-filter>
+        </activity-alias>
+
+        <provider
+            android:name=".UserDirectoryProvider"
+            android:authorities="${applicationId}.user"
+            android:exported="true"
+            android:grantUriPermissions="true"
+            android:permission="android.permission.MANAGE_DOCUMENTS">
+            <intent-filter>
+                <action android:name="android.content.action.DOCUMENTS_PROVIDER" />
+            </intent-filter>
+        </provider>
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/provider_paths" />
+        </provider>
+
+        <meta-data
+            android:name="android.game_mode_config"
+            android:resource="@xml/game_mode_config" />
+    </application>
+
+</manifest>

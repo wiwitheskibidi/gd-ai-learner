@@ -1,0 +1,809 @@
+package com.geode.launcher.utils
+
+import android.Manifest
+import android.content.ActivityNotFoundException
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.hardware.lights.Light
+import android.hardware.lights.LightState
+import android.hardware.lights.LightsRequest
+import android.net.ConnectivityManager
+import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
+import android.provider.DocumentsContract
+import android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION
+import android.util.Log
+import android.view.InputDevice
+import android.widget.Toast
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.Keep
+import androidx.appcompat.app.AppCompatActivity
+import androidx.browser.customtabs.CustomTabsIntent
+import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
+import androidx.documentfile.provider.DocumentFile
+import com.geode.launcher.BuildConfig
+import com.geode.launcher.R
+import com.geode.launcher.activityresult.GeodeOpenFileActivityResult
+import com.geode.launcher.activityresult.GeodeOpenFilesActivityResult
+import com.geode.launcher.activityresult.GeodeSaveFileActivityResult
+import java.io.File
+import java.lang.ref.WeakReference
+import kotlin.system.exitProcess
+
+@Keep
+@Suppress("unused", "KotlinJniMissingFunction")
+object GeodeUtils {
+    private lateinit var activity: WeakReference<AppCompatActivity>
+    var handleSafeArea: Boolean = false
+
+    private lateinit var openFileResultLauncher: ActivityResultLauncher<GeodeOpenFileActivityResult.OpenFileParams>
+    private lateinit var openDirectoryResultLauncher: ActivityResultLauncher<Uri?>
+    private lateinit var openFilesResultLauncher: ActivityResultLauncher<GeodeOpenFilesActivityResult.OpenFileParams>
+    private lateinit var saveFileResultLauncher: ActivityResultLauncher<GeodeSaveFileActivityResult.SaveFileParams>
+    private lateinit var requestPermissionLauncher: ActivityResultLauncher<String>
+    private lateinit var internalRequestPermissionsLauncher: ActivityResultLauncher<Array<String>>
+    private lateinit var internalRequestAllFilesLauncher: ActivityResultLauncher<Intent>
+
+    private var afterRequestPermissions: (() -> Unit)? = null
+    private var afterRequestPermissionsFailure: (() -> Unit)? = null
+
+    fun setContext(activity: AppCompatActivity) {
+        this.activity = WeakReference(activity)
+        openFileResultLauncher = activity.registerForActivityResult(GeodeOpenFileActivityResult()) { uri ->
+            if (uri != null) {
+                val path = FileUtils.getRealPathFromURI(activity, uri)
+                if (path != null) {
+                    selectFileCallback(path)
+                    return@registerForActivityResult
+                }
+
+                Toast.makeText(activity, R.string.file_select_error, Toast.LENGTH_SHORT)
+                    .show()
+            } else {
+                Toast.makeText(activity, R.string.no_file_selected, Toast.LENGTH_SHORT)
+                    .show()
+            }
+
+            failedCallback()
+        }
+        openDirectoryResultLauncher = activity.registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) {
+            if (it != null) {
+                val path = FileUtils.getRealPathFromURI(activity, it)
+                if (path != null) {
+                    selectFileCallback(path)
+                    return@registerForActivityResult
+                }
+
+                Toast.makeText(activity, R.string.file_select_error, Toast.LENGTH_SHORT)
+                    .show()
+            } else {
+                Toast.makeText(activity, R.string.no_file_selected, Toast.LENGTH_SHORT)
+                    .show()
+            }
+            failedCallback()
+        }
+        openFilesResultLauncher = activity.registerForActivityResult(GeodeOpenFilesActivityResult()) { result ->
+            if (result.isEmpty()) {
+                Toast.makeText(activity, R.string.no_file_selected, Toast.LENGTH_SHORT)
+                    .show()
+
+                failedCallback()
+                return@registerForActivityResult
+            }
+            val paths: Array<String> = Array(result.size) {"n = $it"}
+            for (i in result.indices) {
+                val path = FileUtils.getRealPathFromURI(activity, result[i])
+                if (path != null) {
+                    paths[i] = path
+                }
+            }
+            selectFilesCallback(paths)
+            return@registerForActivityResult
+        }
+        saveFileResultLauncher = activity.registerForActivityResult(GeodeSaveFileActivityResult()) { uri ->
+            if (uri != null) {
+                val path = FileUtils.getRealPathFromURI(activity, uri)
+                if (path != null) {
+                    selectFileCallback(path)
+                    return@registerForActivityResult
+                }
+
+                Toast.makeText(activity, R.string.file_select_error, Toast.LENGTH_SHORT)
+                    .show()
+            } else {
+                Toast.makeText(activity, R.string.no_file_selected, Toast.LENGTH_SHORT)
+                    .show()
+            }
+            failedCallback()
+        }
+        requestPermissionLauncher = activity.registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+            permissionCallback(isGranted)
+        }
+
+        internalRequestPermissionsLauncher = activity.registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
+            val isGranted = permissions.values.all { it }
+            if (isGranted) {
+                afterRequestPermissions?.invoke()
+            } else {
+                Toast.makeText(activity, R.string.missing_permissions, Toast.LENGTH_SHORT)
+                    .show()
+
+                afterRequestPermissionsFailure?.invoke()
+            }
+        }
+
+        // only necessary on newer android versions
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            internalRequestAllFilesLauncher = activity.registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { _ ->
+                if (Environment.isExternalStorageManager()) {
+                    afterRequestPermissions?.invoke()
+                } else {
+                    Toast.makeText(activity, R.string.missing_permissions, Toast.LENGTH_SHORT)
+                        .show()
+
+                    afterRequestPermissionsFailure?.invoke()
+                }
+            }
+        }
+    }
+
+    @JvmStatic
+    fun getLogcatCrashBuffer(): String {
+        return try {
+            val logcatProcess = Runtime.getRuntime().exec("logcat -v brief -b crash -d")
+
+            logcatProcess.inputStream.bufferedReader().readText()
+        } catch (e: Exception) {
+            Log.e("Geode", "Failed to get logcat crash buffer", e)
+            ""
+        }
+    }
+
+    @JvmStatic
+    fun writeClipboard(text: String) {
+        activity.get()?.run {
+            val manager = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            val clip = ClipData.newPlainText("Geode", text)
+            manager.setPrimaryClip(clip)
+        }
+    }
+
+    @JvmStatic
+    fun readClipboard(): String {
+        activity.get()?.run {
+            val manager = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            val clip = manager.primaryClip
+            if (clip != null && clip.itemCount > 0) {
+                return clip.getItemAt(0).coerceToText(this).toString()
+            }
+        }
+        return ""
+    }
+
+    @JvmStatic
+    fun restartGame() {
+        restartGame(false)
+    }
+
+    @JvmStatic
+    fun restartGame(safeMode: Boolean) {
+        activity.get()?.run {
+            packageManager.getLaunchIntentForPackage(packageName)?.also {
+                val mainIntent = Intent.makeRestartActivityTask(it.component)
+                mainIntent.putExtra("restarted", true)
+                mainIntent.putExtra("safe-mode", safeMode)
+                startActivity(mainIntent)
+                exitProcess(0)
+            }
+        }
+    }
+
+    // TODO As of now this is unused
+    @JvmStatic
+    fun openFolder(path: String): Boolean {
+        val context = activity.get()!!
+
+        val pathFile = File(path)
+        val baseDirectory = LaunchUtils.getBaseDirectory(context, true)
+        val isInternalPath = pathFile.startsWith(baseDirectory)
+
+        val intent = if (isInternalPath) {
+            val relativePath = pathFile.relativeTo(baseDirectory)
+            val uri = DocumentsContract.buildDocumentUri(
+                "com.android.externalstorage.documents",
+                if (BuildConfig.GOOGLE_PLAY_BUILD) {
+                    "primary:Android/data/${context.packageName}/$relativePath"
+                } else {
+                    "primary:Android/media/${context.packageName}/$relativePath"
+                }
+            )
+
+            Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, DocumentsContract.Document.MIME_TYPE_DIR)
+            }
+        } else {
+            Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addCategory(Intent.CATEGORY_OPENABLE)
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    val documentFile = DocumentFile.fromFile(File(path))
+                    putExtra(DocumentsContract.EXTRA_INITIAL_URI, documentFile.uri)
+                }
+
+                type = "*/*"
+            }
+        }
+
+        return try {
+            context.startActivity(intent)
+            true
+        } catch (_: ActivityNotFoundException) {
+            false
+        }
+    }
+
+    private external fun selectFileCallback(path: String)
+
+    private external fun selectFilesCallback(paths: Array<String>)
+
+    private external fun failedCallback()
+
+    private fun checkForFilePermissions(onSuccess: () -> Unit, onFailure: () -> Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (Environment.isExternalStorageManager()) {
+                onSuccess()
+            } else {
+                val intent = Intent(
+                    ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                    Uri.fromParts("package", BuildConfig.APPLICATION_ID, null)
+                )
+
+                internalRequestAllFilesLauncher.launch(intent)
+                afterRequestPermissions = onSuccess
+                afterRequestPermissionsFailure = onFailure
+            }
+        } else {
+            val permissions = listOf(
+                Manifest.permission.READ_EXTERNAL_STORAGE,
+                Manifest.permission.WRITE_EXTERNAL_STORAGE
+            )
+
+            val context = activity.get()!!
+
+            val needsPermissions = permissions.filter {
+                ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
+            }
+
+            if (needsPermissions.isNotEmpty()) {
+                internalRequestPermissionsLauncher.launch(needsPermissions.toTypedArray())
+                afterRequestPermissions = onSuccess
+                afterRequestPermissionsFailure = onFailure
+            } else {
+                onSuccess()
+            }
+        }
+    }
+
+    @JvmStatic
+    fun selectFile(path: String): Boolean {
+        var uri: Uri?
+        DocumentFile.fromFile(File(path)).also {
+            uri = it.uri
+        }
+
+        return try {
+            checkForFilePermissions(
+                onSuccess = {
+                    openFileResultLauncher.launch(GeodeOpenFileActivityResult.OpenFileParams(arrayOf("*/*"), uri))
+                },
+                onFailure = { failedCallback() }
+            )
+
+            true
+        } catch (e: ActivityNotFoundException) {
+            false
+        }
+    }
+
+    @JvmStatic
+    fun selectFiles(path: String): Boolean {
+        var uri: Uri?
+        DocumentFile.fromFile(File(path)).also {
+            uri = it.uri
+        }
+
+        return try {
+            checkForFilePermissions(
+                onSuccess = {
+                    openFilesResultLauncher.launch(GeodeOpenFilesActivityResult.OpenFileParams(arrayOf("*/*"), uri))
+                },
+                onFailure = { failedCallback() }
+            )
+
+            true
+        } catch (e: ActivityNotFoundException) {
+            false
+        }
+    }
+
+    @JvmStatic
+    fun selectFolder(path: String): Boolean {
+        var uri: Uri?
+        DocumentFile.fromFile(File(path)).also {
+            uri = it.uri
+        }
+
+        return try {
+            checkForFilePermissions(
+                onSuccess = {
+                    openDirectoryResultLauncher.launch(uri)
+                },
+                onFailure = { failedCallback() }
+            )
+
+            true
+        } catch (e: ActivityNotFoundException) {
+            false
+        }
+
+    }
+
+    @JvmStatic
+    fun createFile(path: String): Boolean {
+        val initialPath = File(path)
+
+        return try {
+            checkForFilePermissions(
+                onSuccess = {
+                    saveFileResultLauncher.launch(GeodeSaveFileActivityResult.SaveFileParams(null, initialPath))
+                },
+                onFailure = { failedCallback() }
+            )
+
+            true
+        } catch (e: ActivityNotFoundException) {
+            false
+        }
+    }
+
+    @JvmStatic
+    fun getBaseDirectory(): String {
+        val activity = activity.get()!!
+        return LaunchUtils.getBaseDirectory(activity).canonicalPath
+    }
+
+    @JvmStatic
+    fun getInternalDirectory(): String {
+        val activity = activity.get()!!
+        return activity.filesDir.canonicalPath
+    }
+
+    @JvmStatic
+    fun getGameVersion(): String {
+        // these versions should be aligned to windows releases, not what android says
+        activity.get()?.run {
+            return GamePackageUtils.getUnifiedVersionName(packageManager)
+        }
+
+        return ""
+    }
+
+    @JvmStatic
+    fun getGameVersionCode(): Long {
+        activity.get()?.run {
+            return GamePackageUtils.getGameVersionCode(packageManager)
+        }
+
+        return 0L
+    }
+
+    /**
+     * Returns the current version code of the launcher.
+     */
+    @JvmStatic
+    fun getLauncherVersion(): Int {
+        return BuildConfig.VERSION_CODE
+    }
+
+    fun isGeodeUri(uri: Uri): Boolean {
+        return "${BuildConfig.APPLICATION_ID}.user" == uri.authority
+    }
+
+    private const val INTERNAL_PERMISSION_PREFIX = "geode.permission_internal"
+    private const val MANAGE_ALL_FILES = "${INTERNAL_PERMISSION_PREFIX}.MANAGE_ALL_FILES"
+
+    @JvmStatic
+    fun getPermissionStatus(permission: String): Boolean {
+        val context = activity.get() ?: return false
+
+        return when (permission) {
+            MANAGE_ALL_FILES -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                Environment.isExternalStorageManager()
+            } else {
+                val permissions = listOf(
+                    Manifest.permission.READ_EXTERNAL_STORAGE,
+                    Manifest.permission.WRITE_EXTERNAL_STORAGE
+                )
+
+                permissions.all {
+                    ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
+                }
+            }
+            else -> ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+        }
+    }
+
+    @JvmStatic
+    fun requestPermission(permission: String) {
+        if (permission == MANAGE_ALL_FILES) {
+            // this function handles already having perms for us
+            checkForFilePermissions(onSuccess = {
+                permissionCallback(true)
+            }, onFailure = {
+                permissionCallback(false)
+            })
+
+            return
+        }
+
+        if (getPermissionStatus(permission)) {
+            permissionCallback(true)
+            return
+        }
+
+        try {
+            requestPermissionLauncher.launch(permission)
+        } catch (e: ActivityNotFoundException) {
+            permissionCallback(false)
+        }
+    }
+
+    private external fun permissionCallback(granted: Boolean)
+
+    internal fun getVibrator(): Vibrator? = activity.get()?.run {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val manager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+            manager.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+        }
+    }
+
+    // vibration
+
+    /**
+     * If vibration is supported on the device.
+     */
+    @JvmStatic
+    fun vibrateSupported(): Boolean = getVibrator()?.hasVibrator() == true
+
+    /**
+     * Vibrates for the given amount of time.
+     */
+    @JvmStatic
+    fun vibrate(ms: Long) {
+        if (ms == 0L) {
+            getVibrator()?.cancel()
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            getVibrator()?.vibrate(VibrationEffect.createOneShot(ms, VibrationEffect.DEFAULT_AMPLITUDE))
+        } else {
+            @Suppress("DEPRECATION")
+            getVibrator()?.vibrate(ms)
+        }
+    }
+
+    /**
+     * Vibrates with the given pattern.
+     * @see android.os.VibrationEffect.createWaveform
+     */
+    @JvmStatic
+    fun vibratePattern(pattern: LongArray, repeat: Int) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            getVibrator()?.vibrate(VibrationEffect.createWaveform(pattern, repeat))
+        } else {
+            @Suppress("DEPRECATION")
+            getVibrator()?.vibrate(pattern, repeat)
+        }
+    }
+
+    @JvmStatic
+    fun getScreenInsets(): IntArray? {
+        if (!handleSafeArea || Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
+            return null
+        }
+
+        return activity.get()?.run {
+            val displayCutout = window.decorView.rootWindowInsets?.displayCutout ?: return null
+
+            intArrayOf(displayCutout.safeInsetLeft, displayCutout.safeInsetBottom, displayCutout.safeInsetRight, displayCutout.safeInsetTop)
+        }
+    }
+
+    const val ARGUMENT_SAFE_MODE = "--geode:safe-mode"
+
+    private var additionalLaunchArguments = arrayListOf<String>()
+    fun setAdditionalLaunchArguments(vararg args: String) {
+        additionalLaunchArguments.addAll(args)
+    }
+
+    fun clearLaunchArguments() = setAdditionalLaunchArguments()
+
+    @JvmStatic
+    fun getLaunchArguments(): String? {
+        activity.get()?.apply {
+            val preferences = PreferenceUtils.get(this)
+
+            val userArgs = preferences.getString(PreferenceUtils.Key.LAUNCH_ARGUMENTS)
+            val args = if (!userArgs.isNullOrEmpty()) {
+                listOf(userArgs) + additionalLaunchArguments
+            } else additionalLaunchArguments
+
+            return args.joinToString(" ")
+        }
+
+        return null
+    }
+
+    interface CapabilityListener {
+        fun onCapabilityAdded(capability: String): Boolean
+    }
+
+    const val CAPABILITY_EXTENDED_INPUT = "extended_input"
+    const val CAPABILITY_TIMESTAMP_INPUT = "timestamp_inputs"
+    const val CAPABILITY_RICH_INPUT = "internal_callbacks_v2"
+    const val CAPABILITY_RESIZE_CALLBACK = "resize_callbacks"
+
+    private var capabilityListener: WeakReference<CapabilityListener?> = WeakReference(null)
+
+    fun setCapabilityListener(listener: CapabilityListener) {
+        capabilityListener = WeakReference(listener)
+    }
+
+    /**
+     * Reports that the game client supports a feature.
+     * These features typically require callbacks into the game, so ensure that the required methods are registered first.
+     */
+    @JvmStatic
+    fun reportPlatformCapability(capability: String?): Boolean {
+        if (capability.isNullOrEmpty()) {
+            return false
+        }
+
+        return capabilityListener.get()?.onCapabilityAdded(capability) == true
+    }
+
+    @JvmStatic
+    fun openWebview(url: String) {
+        val activity = activity.get() ?: return
+        CustomTabsIntent.Builder()
+            .setShowTitle(true)
+            .build()
+            .launchUrl(activity, url.toUri())
+    }
+
+    /**
+     * Determines if any gamepad or joystick input devices are connected.
+     * This is useful during start, but tracking inputDeviceAdded events is better during runtime.
+     */
+    @JvmStatic
+    fun controllersConnected(): Int {
+        val deviceIds = InputDevice.getDeviceIds()
+        return deviceIds.count {
+            InputDevice.getDevice(it)?.run {
+                sources and InputDevice.SOURCE_GAMEPAD == InputDevice.SOURCE_GAMEPAD || sources and InputDevice.SOURCE_JOYSTICK == InputDevice.SOURCE_JOYSTICK
+            } ?: false
+        }
+    }
+
+    @JvmStatic
+    fun getConnectedDevices(): IntArray = InputDevice.getDeviceIds()
+
+    @JvmStatic
+    fun getDevice(deviceId: Int): InputDevice? = InputDevice.getDevice(deviceId)
+
+    @JvmStatic
+    fun getDeviceBatteryCapacity(deviceId: Int): Float {
+        val device = InputDevice.getDevice(deviceId) ?: return 0.0f
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            device.batteryState.capacity
+        } else {
+            0.0f
+        }
+    }
+
+    @JvmStatic
+    fun deviceHasBattery(deviceId: Int): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            return false
+        }
+
+        val device = InputDevice.getDevice(deviceId) ?: return false
+        return device.batteryState.isPresent
+    }
+
+    @JvmStatic
+    fun getDeviceBatteryStatus(deviceId: Int): Int {
+        val device = InputDevice.getDevice(deviceId) ?: return 0
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            device.batteryState.status
+        } else {
+            0
+        }
+    }
+
+    @JvmStatic
+    fun getDeviceLightsCount(deviceId: Int): Int {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            return 0
+        }
+
+        val device = InputDevice.getDevice(deviceId) ?: return 0
+        val lightsManager = device.lightsManager
+
+        return lightsManager.lights.size
+    }
+
+    // this is based on paddleboat's api
+    @JvmStatic
+    fun getLightType(deviceId: Int): Int {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            return 0
+        }
+
+        val device = InputDevice.getDevice(deviceId) ?: return 0
+        val lightsManager = device.lightsManager
+
+        var flags = 0
+        lightsManager.lights.forEach { light ->
+            if (light.type == Light.LIGHT_TYPE_PLAYER_ID) {
+                flags = flags or 1
+            } else if (light.hasRgbControl()) {
+                flags = flags or 2
+            }
+        }
+
+        return flags
+    }
+
+    /**
+     * Sets the color for a device.
+     * @return false if the given device does not exist or setting lights was otherwise unsuccessful
+     */
+    @JvmStatic
+    fun setDeviceLightColor(deviceId: Int, color: Int, type: Int): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            return false
+        }
+
+        val device = InputDevice.getDevice(deviceId) ?: return false
+        val lightsManager = device.lightsManager
+
+        val lights = lightsManager.lights
+        if (lights.isEmpty()) {
+            return false
+        }
+
+        val actedLights = lights.count { light ->
+            val state = LightState.Builder()
+
+            if (light.type == Light.LIGHT_TYPE_PLAYER_ID && (type and 1 == 1)) {
+                state.setPlayerId(color)
+            } else if (light.hasRgbControl() && (type and 2 == 2)) {
+                state.setColor(color)
+            } else {
+                return@count false
+            }
+
+            val request = LightsRequest.Builder()
+                    .addLight(light, state.build())
+                    .build()
+
+            lightsManager.openSession()
+                .requestLights(request)
+
+            true
+        }
+
+        return actedLights > 0
+    }
+
+    @JvmStatic
+    fun getDeviceHapticsCount(deviceId: Int): Int {
+        val device = InputDevice.getDevice(deviceId) ?: return 0
+
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            return if (device.vibrator.hasVibrator()) 1 else 0
+        }
+
+        val vibratorManager = device.vibratorManager
+        val vibratorIds = vibratorManager.vibratorIds
+        return vibratorIds.size
+    }
+
+    private fun performVibration(vibrator: Vibrator?, durationMs: Long, intensity: Int) {
+        vibrator?.apply {
+            if (intensity == 0) {
+                cancel()
+            } else {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    val vibrationEffect = VibrationEffect.createOneShot(durationMs, intensity)
+                    vibrate(vibrationEffect)
+                } else {
+                    vibrate(durationMs)
+                }
+            }
+        }
+    }
+
+    /**
+     * Vibrates a given device. Set motorIdx == -1 to vibrate all available motors on a device.
+     */
+    @JvmStatic
+    fun vibrateDevice(deviceId: Int, durationMs: Long, intensity: Int, motorIdx: Int): Boolean {
+        val device = InputDevice.getDevice(deviceId) ?: return false
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val vibratorManager = device.vibratorManager
+            val vibratorIds = vibratorManager.vibratorIds
+
+            if (motorIdx == -1) {
+                vibratorIds.forEach {
+                    val vibrator = vibratorManager.getVibrator(it)
+                    performVibration(vibrator, durationMs, intensity)
+                }
+            } else {
+                val deviceId = vibratorIds.getOrNull(motorIdx) ?: return false
+                val vibrator = vibratorManager.getVibrator(deviceId)
+                performVibration(vibrator, durationMs, intensity)
+            }
+        } else {
+            val vibrator = device.vibrator
+            performVibration(vibrator, durationMs, intensity)
+        }
+
+        return true
+    }
+
+    @JvmStatic
+    fun getConnectivityManager(): ConnectivityManager? = activity.get()?.run {
+        getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    }
+
+    external fun nativeKeyUp(keyCode: Int, modifiers: Int)
+    external fun nativeKeyDown(keyCode: Int, modifiers: Int, isRepeating: Boolean)
+    external fun nativeActionScroll(scrollX: Float, scrollY: Float)
+    external fun resizeSurface(width: Int, height: Int)
+
+    /**
+     * Gives the timestamp of the next input callback, in nanoseconds.
+     * Enable this by sending the "timestamp_inputs" platform capability.
+     * @see reportPlatformCapability
+     */
+    external fun setNextInputTimestamp(timestamp: Long)
+
+    const val TOUCH_TYPE_BEGIN = 0
+    const val TOUCH_TYPE_MOVE = 1
+    const val TOUCH_TYPE_END = 2
+    const val TOUCH_TYPE_CANCEL = 3
+
+    external fun internalKeyEvent(timestamp: Long, deviceId: Int, eventSource: Int, keyCode: Int, modifiers: Int, isDown: Boolean, repeatCount: Int)
+    external fun internalTouchEvent(timestamp: Long, deviceId: Int, eventSource: Int, eventType: Int, ids: IntArray, xs: FloatArray, ys: FloatArray)
+    external fun internalScrollEvent(timestamp: Long, deviceId: Int, eventSource: Int, scrollX: Float, scrollY: Float, mouseX: Float, mouseY: Float)
+    external fun internalJoystickEvent(timestamp: Long, deviceId: Int, eventSource: Int, leftX: FloatArray, leftY: FloatArray, rightX: FloatArray, rightY: FloatArray, hatX: FloatArray, hatY: FloatArray, leftTrigger: FloatArray, rightTrigger: FloatArray)
+
+    external fun inputDeviceAdded(deviceId: Int)
+    external fun inputDeviceChanged(deviceId: Int)
+    external fun inputDeviceRemoved(deviceId: Int)
+}

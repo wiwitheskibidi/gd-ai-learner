@@ -1,0 +1,24 @@
+{
+	"geode": "5.11.2",
+	"gd": {
+		"android": "2.2081",
+		"win": "2.2081",
+		"mac": "2.2081"
+	},
+	"id": "william.gd-ai-learner",
+	"name": "AI Learner",
+	"version": "v1.0.0",
+	"developer": "William",
+	"description": "Press the AI button in the pause menu and a reinforcement-learning agent learns the level you are on.",
+	"settings": {
+		"training-speed": {
+			"type": "float",
+			"name": "Training speed",
+			"description": "Game speed multiplier while the AI is learning.",
+			"default": 1.0,
+			"min": 0.5,
+			"max": 4.0,
+			"control": { "slider": true, "slider-step": 0.25 }
+		}
+	}
+}

@@ -1,0 +1,188 @@
+package org.cocos2dx.lib
+
+import android.opengl.GLSurfaceView
+import android.os.Build
+import javax.microedition.khronos.egl.EGLConfig
+import javax.microedition.khronos.opengles.GL10
+
+private const val NANOSECONDS_PER_SECOND = 1000000000L
+private const val NANOSECONDS_PER_MICROSECOND = 1000000L
+
+@Suppress("unused", "KotlinJniMissingFunction")
+class Cocos2dxRenderer(private var handler: Cocos2dxGLSurfaceView) : GLSurfaceView.Renderer {
+    companion object {
+        @JvmStatic
+        fun setAnimationInterval(@Suppress("UNUSED_PARAMETER") animationInterval: Double) {
+            // this function is useless for gd
+        }
+
+        @JvmStatic
+        private external fun nativeDeleteBackward()
+
+        @JvmStatic
+        private external fun nativeGetContentText(): String
+
+        @JvmStatic
+        private external fun nativeInsertText(text: String)
+
+        @JvmStatic
+        private external fun nativeKeyDown(keyCode: Int): Boolean
+
+        @JvmStatic
+        private external fun nativeKeyboardEvent(
+            keyCode: Int,
+            down: Boolean,
+            isRepeat: Boolean,
+            timestamp: Double,
+            shiftPressed: Boolean,
+            ctrlPressed: Boolean,
+            altPressed: Boolean
+        )
+
+        @JvmStatic
+        private external fun nativeKeyboardWillShow(offset: Int)
+
+        @JvmStatic
+        private external fun nativeOnPause()
+
+        @JvmStatic
+        private external fun nativeOnResume()
+
+        @JvmStatic
+        private external fun nativeScroll(x: Float, y: Float, scrollY: Float, scrollX: Float)
+
+        @JvmStatic
+        private external fun nativeRender()
+
+        @JvmStatic
+        private external fun nativeTextClosed()
+
+        // timestamp was added in 2.208, but the jni method has no required type signature.
+        // it doesn't hurt to unconditionally send one
+
+        @JvmStatic
+        private external fun nativeTouchesBegin(id: Int, x: Float, y: Float, timestamp: Double)
+
+        @JvmStatic
+        private external fun nativeTouchesCancel(
+            ids: IntArray,
+            xs: FloatArray,
+            ys: FloatArray,
+            timestamp: Double,
+        )
+
+        @JvmStatic
+        private external fun nativeTouchesEnd(id: Int, x: Float, y: Float, timestamp: Double)
+
+        @JvmStatic
+        private external fun nativeTouchesMove(ids: IntArray, xs: FloatArray, ys: FloatArray, timestamp: Double)
+
+        @JvmStatic
+        private external fun nativeInit(width: Int, height: Int)
+    }
+
+    private var lastTickInNanoSeconds: Long = 0
+    private var screenWidth = 0
+    private var screenHeight = 0
+    var sendResizeEvents = false
+    var setFrameRate = false
+    private var mAnimationInterval: Long? = null
+
+    fun limitFrameRate(rate: Int) {
+        mAnimationInterval = NANOSECONDS_PER_SECOND/rate
+    }
+
+    fun setScreenWidthAndHeight(surfaceWidth: Int, surfaceHeight: Int) {
+        screenWidth = surfaceWidth
+        screenHeight = surfaceHeight
+    }
+
+    override fun onSurfaceCreated(gl10: GL10?, eglConfig: EGLConfig?) {
+        nativeInit(screenWidth, screenHeight)
+        lastTickInNanoSeconds = System.nanoTime()
+    }
+
+    override fun onSurfaceChanged(gl10: GL10?, width: Int, height: Int) {
+        if (setFrameRate && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            handler.updateRefreshRate()
+        }
+
+        println("renderer surfaceChanged: ${width}x${height}@${handler.display.refreshRate}fps")
+    }
+
+    override fun onDrawFrame(gl: GL10?) {
+        val animationInterval = mAnimationInterval
+        if (animationInterval == null) {
+            nativeRender()
+        } else {
+            nativeRender()
+
+            val now = System.nanoTime()
+            val interval = now - this.lastTickInNanoSeconds
+
+            if (interval < animationInterval) {
+                try {
+                    Thread.sleep((animationInterval - interval) / NANOSECONDS_PER_MICROSECOND)
+                } catch (e: Exception) {}
+            }
+
+            lastTickInNanoSeconds = System.nanoTime()
+        }
+    }
+
+    fun handleActionDown(id: Int, x: Float, y: Float, timestamp: Double) {
+        nativeTouchesBegin(id, x, y, timestamp)
+    }
+
+    fun handleActionUp(id: Int, x: Float, y: Float, timestamp: Double) {
+        nativeTouchesEnd(id, x, y, timestamp)
+    }
+
+    fun handleActionCancel(ids: IntArray, xs: FloatArray, ys: FloatArray, timestamp: Double) {
+        nativeTouchesCancel(ids, xs, ys, timestamp)
+    }
+
+    fun handleActionMove(ids: IntArray, xs: FloatArray, ys: FloatArray, timestamp: Double) {
+        nativeTouchesMove(ids, xs, ys, timestamp)
+    }
+
+    fun handleKeyDown(keyCode: Int) {
+        nativeKeyDown(keyCode)
+    }
+
+    fun handleKeyboardWillShow(offset: Int) {
+        nativeKeyboardWillShow(offset)
+    }
+
+    fun handleKeyboardEvent(keyCode: Int, down: Boolean, isRepeat: Boolean, timestamp: Double, shiftPressed: Boolean, ctrlPressed: Boolean, altPressed: Boolean) {
+        nativeKeyboardEvent(keyCode, down, isRepeat, timestamp, shiftPressed, ctrlPressed, altPressed)
+    }
+
+    fun handleScroll(x: Float, y: Float, scrollY: Float, scrollX: Float) {
+        nativeScroll(x, y, scrollY, scrollX)
+    }
+
+    fun handleOnPause() {
+        nativeOnPause()
+    }
+
+    fun handleOnResume() {
+        nativeOnResume()
+    }
+
+    fun handleInsertText(text: String) {
+        nativeInsertText(text)
+    }
+
+    fun handleDeleteBackward() {
+        nativeDeleteBackward()
+    }
+
+    fun handleTextClosed() {
+        nativeTextClosed()
+    }
+
+    fun getContentText(): String {
+        return nativeGetContentText()
+    }
+}

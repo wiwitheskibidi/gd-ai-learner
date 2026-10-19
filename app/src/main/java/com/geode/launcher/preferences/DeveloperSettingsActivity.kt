@@ -1,0 +1,276 @@
+package com.geode.launcher.preferences
+
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
+import android.os.Build
+import android.os.Bundle
+import android.widget.Toast
+import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedDispatcher
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import com.geode.launcher.BuildConfig
+import com.geode.launcher.R
+import com.geode.launcher.preferences.components.OptionsButton
+import com.geode.launcher.preferences.components.OptionsGroup
+import com.geode.launcher.preferences.components.ProfileCreateCard
+import com.geode.launcher.preferences.components.ProfileSelectCard
+import com.geode.launcher.preferences.components.SettingsCard
+import com.geode.launcher.preferences.components.SettingsSelectCard
+import com.geode.launcher.preferences.components.SettingsStringCard
+import com.geode.launcher.ui.theme.GeodeLauncherTheme
+import com.geode.launcher.ui.theme.LocalTheme
+import com.geode.launcher.ui.theme.Theme
+import com.geode.launcher.utils.LaunchUtils
+import com.geode.launcher.utils.PreferenceUtils
+
+class DeveloperSettingsActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge()
+
+        super.onCreate(savedInstanceState)
+        setContent {
+            val themeOption by PreferenceUtils.useIntPreference(PreferenceUtils.Key.THEME)
+            val theme = Theme.fromInt(themeOption)
+
+            val backgroundOption by PreferenceUtils.useBooleanPreference(PreferenceUtils.Key.BLACK_BACKGROUND)
+            val dynamicColorOption by PreferenceUtils.useBooleanPreference(PreferenceUtils.Key.DISABLE_USER_THEME)
+
+            CompositionLocalProvider(LocalTheme provides theme) {
+                GeodeLauncherTheme(theme = theme, blackBackground = backgroundOption, dynamicColor = !dynamicColorOption) {
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        color = MaterialTheme.colorScheme.background
+                    ) {
+                        DeveloperSettingsScreen(onBackPressedDispatcher)
+                    }
+                }
+            }
+        }
+    }
+}
+
+fun onOpenFolder(context: Context) {
+    val file = LaunchUtils.getBaseDirectory(context)
+    val clipboardManager =
+        context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    clipboardManager.setPrimaryClip(
+        ClipData.newPlainText(
+            context.getString(R.string.export_folder_tag),
+            file.path
+        )
+    )
+    if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.S_V2) {
+        Toast.makeText(
+            context,
+            context.getString(R.string.text_copied),
+            Toast.LENGTH_SHORT
+        ).show()
+    }
+}
+
+fun onOpenLogs(context: Context) {
+    val launchIntent = Intent(context, ApplicationLogsActivity::class.java)
+    context.startActivity(launchIntent)
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DeveloperSettingsScreen(onBackPressedDispatcher: OnBackPressedDispatcher?) {
+    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
+
+    Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        topBar = {
+            Column {
+                TopAppBar(
+                    navigationIcon = {
+                        IconButton(onClick = { onBackPressedDispatcher?.onBackPressed() }) {
+                            Icon(
+                                painterResource(R.drawable.icon_arrow_back),
+                                contentDescription = stringResource(R.string.back_icon_alt)
+                            )
+                        }
+                    },
+                    title = {
+                        Text(
+                            stringResource(R.string.title_activity_developer_settings),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    },
+                    scrollBehavior = scrollBehavior,
+                    colors = TopAppBarDefaults.topAppBarColors(MaterialTheme.colorScheme.background),
+                )
+            }
+        }
+    ) { innerPadding ->
+        Column(
+            Modifier
+                .padding(innerPadding)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+
+            val developerMode by PreferenceUtils.useBooleanPreference(PreferenceUtils.Key.DEVELOPER_MODE)
+
+            OptionsGroup {
+                SettingsCard(
+                    title = stringResource(R.string.preference_developer_mode),
+                    preferenceKey = PreferenceUtils.Key.DEVELOPER_MODE,
+                )
+            }
+
+            if (developerMode) {
+                OptionsGroup(title = stringResource(R.string.preference_category_gameplay)) {
+                    SettingsStringCard(
+                        title = stringResource(R.string.preference_launch_arguments_name),
+                        dialogTitle = stringResource(R.string.preference_launch_arguments_set_title),
+                        preferenceKey = PreferenceUtils.Key.LAUNCH_ARGUMENTS,
+                        filterInput = {
+                            it.filter { c ->
+                                // if only there was a better way to define this!
+                                "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890!@#$%^&*(){}<>[]?:;'\"~`-_+=\\| ".contains(
+                                    c
+                                )
+                            }
+                        }
+                    )
+
+                    /*
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        SettingsCard(
+                            title = stringResource(R.string.preference_force_hrr),
+                            preferenceKey = PreferenceUtils.Key.FORCE_HRR,
+                        )
+                    }
+
+                    SettingsCard(
+                        title = stringResource(R.string.preference_override_exceptions_name),
+                        description = stringResource(R.string.preference_override_exceptions_description),
+                        preferenceKey = PreferenceUtils.Key.CUSTOM_SYMBOL_LIST
+                    )
+                    */
+                }
+
+                OptionsGroup(stringResource(R.string.preference_category_developer)) {
+                    val context = LocalContext.current
+                    OptionsButton(
+                        title = stringResource(R.string.preferences_view_logs),
+                        icon = {
+                            Icon(
+                                painterResource(R.drawable.icon_mobile_code),
+                                contentDescription = null
+                            )
+                        },
+                        onClick = { onOpenLogs(context) }
+                    )
+
+                    OptionsButton(
+                        title = stringResource(R.string.preferences_copy_external_button),
+                        description = LaunchUtils.getBaseDirectory(context).path,
+                        onClick = { onOpenFolder(context) }
+                    )
+                }
+
+                if (!BuildConfig.GOOGLE_PLAY_BUILD) {
+                    OptionsGroup(title = stringResource(R.string.preference_category_updater)) {
+                        val context = LocalContext.current
+
+                        SettingsSelectCard(
+                            title = stringResource(R.string.preference_release_channel_tag_name),
+                            dialogTitle = stringResource(R.string.preference_release_channel_select),
+                            preferenceKey = PreferenceUtils.Key.RELEASE_CHANNEL_TAG,
+                            options = linkedMapOf(
+                                0 to stringResource(R.string.preference_release_channel_stable),
+                                1 to stringResource(R.string.preference_release_channel_beta),
+                                2 to stringResource(R.string.preference_release_channel_nightly),
+                            ),
+                            extraSelectBehavior = {
+                                PreferenceUtils.get(context)
+                                    .setLong(PreferenceUtils.Key.LAST_UPDATE_CHECK_TIME, 0L)
+                            }
+                        )
+
+                        SettingsCard(
+                            title = stringResource(R.string.preference_disable_update_cache),
+                            preferenceKey = PreferenceUtils.Key.DISABLE_UPDATE_CACHE
+                        )
+                    }
+                }
+
+                OptionsGroup(title = stringResource(R.string.preference_category_testing)) {
+                    SettingsSelectCard(
+                        title = stringResource(R.string.preference_launch_delay),
+                        dialogTitle = stringResource(R.string.preference_launch_delay_select),
+                        preferenceKey = PreferenceUtils.Key.WAIT_PERIOD,
+                        options = linkedMapOf(
+                            0 to stringResource(R.string.preference_launch_delay_instant),
+                            1 to pluralStringResource(
+                                R.plurals.preference_launch_delay_value,
+                                1,
+                                1
+                            ),
+                            3 to pluralStringResource(
+                                R.plurals.preference_launch_delay_value,
+                                3,
+                                3
+                            ),
+                            5 to pluralStringResource(
+                                R.plurals.preference_launch_delay_value,
+                                5,
+                                5
+                            ),
+                        )
+                    )
+
+                    /*
+                    SettingsCard(
+                        title = stringResource(R.string.preference_disable_redesign),
+                        preferenceKey = PreferenceUtils.Key.DISABLE_REDESIGN,
+                    )
+                    */
+                }
+
+                OptionsGroup(title = stringResource(R.string.preference_profiles)) {
+                    ProfileCreateCard()
+                    ProfileSelectCard()
+                }
+            }
+
+            Spacer(Modifier.height(4.dp))
+        }
+    }
+}
