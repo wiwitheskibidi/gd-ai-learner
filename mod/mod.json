@@ -7,9 +7,9 @@
 	},
 	"id": "william.gd-ai-learner",
 	"name": "AI Learner",
-	"version": "v1.0.0",
+	"version": "v1.1.0",
 	"developer": "William",
-	"description": "Press the AI button in the pause menu and a reinforcement-learning agent learns the level you are on.",
+	"description": "AI that learns any level (rapid learning, guides, replays, stats) and builds levels from a prompt.",
 	"settings": {
 		"training-speed": {
 			"type": "float",
@@ -46,6 +46,24 @@
 				"slider": true,
 				"arrows": true
 			}
+		},
+		"smart-ai": {
+			"type": "bool",
+			"name": "Smart AI",
+			"default": true,
+			"description": "Also learn from what's coming up (spikes, blocks), so skills carry over to other levels."
+		},
+		"anthropic-api-key": {
+			"type": "string",
+			"name": "Anthropic API key",
+			"default": "",
+			"description": "Optional. Lets the AI Level Builder use Claude. Leave empty to use the free offline generator. Stored on this device only."
+		},
+		"claude-model": {
+			"type": "string",
+			"name": "Claude model",
+			"default": "claude-opus-5-5",
+			"description": "Model used by the AI Level Builder."
 		}
 	}
 }
