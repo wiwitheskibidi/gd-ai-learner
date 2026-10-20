@@ -107,14 +107,11 @@ struct Agent {
         return levelLength > 0 ? std::min(100.f, 100.f * x / levelLength) : 0.f;
     }
 
+    // The best run is a single real attempt from the start of the level, so a
+    // replay is an exact copy (no stitched practice segments).
     void commitAttempt(float endX) {
-        bool connects = startX <= bestRunEnd + 1.f || startX < 50.f;
-        if (endX <= bestRunEnd || !connects) return;
-        bestRun.erase(std::remove_if(bestRun.begin(), bestRun.end(),
-            [&](Input const& in) { return in.x >= startX; }), bestRun.end());
-        // make sure the button state is defined at the seam
-        bestRun.push_back({startX, false});
-        bestRun.insert(bestRun.end(), attemptInputs.begin(), attemptInputs.end());
+        if (startX > 50.f || endX <= bestRunEnd) return;
+        bestRun = attemptInputs;
         bestRunEnd = endX;
     }
 
@@ -363,7 +360,7 @@ struct Agent {
     }
 
     void save() {
-        writeInputs(file("bestrun"), bestRunEnd, bestRun);
+        writeInputs(file("run"), bestRunEnd, bestRun);
         writeInputs(file("guide"), guideEnd, guide);
         writeTable(file("qtable"), q, bestX, attempts);
         writeTable(dir() / "general.qtable", gq, 0.f, 0);
@@ -389,7 +386,7 @@ struct Agent {
         frontierDeaths = 0;
         frontierBest = 0.f;
         attemptTimes.clear();
-        readInputs(file("bestrun"), bestRunEnd, bestRun);
+        readInputs(file("run"), bestRunEnd, bestRun);
         readInputs(file("guide"), guideEnd, guide);
         readTable(file("qtable"), q, bestX, attempts);
         loadMeta();
@@ -397,7 +394,7 @@ struct Agent {
 
     void resetLevelData() {
         std::error_code ec;
-        for (auto ext : {"qtable", "bestrun", "guide", "meta"}) std::filesystem::remove(file(ext), ec);
+        for (auto ext : {"qtable", "run", "guide", "meta"}) std::filesystem::remove(file(ext), ec);
         Mod::get()->setSavedValue<float>(fmt::format("best-{}", levelID), -1.f);
         Mod::get()->setSavedValue<int>(fmt::format("attempts-{}", levelID), 0);
         int id = levelID;
@@ -419,7 +416,7 @@ static int copyAIFiles(std::filesystem::path const& from, std::filesystem::path 
     int n = 0;
     for (auto& entry : std::filesystem::directory_iterator(from, ec)) {
         auto ext = entry.path().extension().string();
-        if (ext != ".qtable" && ext != ".bestrun" && ext != ".guide" && ext != ".meta") continue;
+        if (ext != ".qtable" && ext != ".run" && ext != ".guide" && ext != ".meta") continue;
         std::filesystem::copy_file(entry.path(), to / entry.path().filename(),
             std::filesystem::copy_options::overwrite_existing, ec);
         if (!ec) n++;
@@ -468,6 +465,9 @@ static void finishRecording(float endX) {
 // ---------- heatmap (drawn in level space, so it scrolls with the level) ----------
 
 constexpr int HEATMAP_TAG = 0xA1EA7;
+
+// set when a replay restarts; the control loop clears its tick accumulator
+static bool s_replayAccReset = false;
 
 static void refreshHeatmap(GJBaseGameLayer* gl) {
     if (!gl || !gl->m_objectLayer) return;
@@ -826,6 +826,7 @@ class $modify(AIPlayLayer, PlayLayer) {
         PlayLayer::resetLevel();
         if (g_ai.replaying) {
             g_ai.replayIdx = 0;
+            s_replayAccReset = true;
             handleButton(false, 1, true);
             return;
         }
@@ -977,6 +978,12 @@ class $modify(AIPlayLayer, PlayLayer) {
 
 // ---------- the control loop ----------
 
+// GD 2.2 simulates physics at a fixed 240 ticks per second.
+constexpr float PHYSICS_TPS = 240.f;
+// a hair over one tick so float rounding never yields a 0-tick update
+constexpr float TICK_DT = 1.0001f / PHYSICS_TPS;
+static float s_replayAcc = 0.f;
+
 class $modify(AIGameLayer, GJBaseGameLayer) {
     // Record the player's own inputs while recording a guide.
     void handleButton(bool down, int button, bool isPlayer1) {
@@ -990,9 +997,26 @@ class $modify(AIGameLayer, GJBaseGameLayer) {
     void update(float dt) {
         auto pl = PlayLayer::get();
         bool isPlay = pl && static_cast<GJBaseGameLayer*>(pl) == this;
-        if (isPlay && (g_ai.replaying || g_ai.recording)) {
+        if (isPlay && g_ai.replaying) {
+            // One physics tick per update call, applying recorded inputs between
+            // ticks, so presses land on exactly the same tick as when recorded.
+            if (s_replayAccReset) {
+                s_replayAcc = 0.f;
+                s_replayAccReset = false;
+            }
+            s_replayAcc += dt * PHYSICS_TPS;
+            int ticks = 0;
+            while (s_replayAcc >= 1.f && ticks < 64 && g_ai.replaying) {
+                s_replayAcc -= 1.f;
+                ticks++;
+                this->replayStep();
+                GJBaseGameLayer::update(TICK_DT);
+            }
+            static_cast<AIPlayLayer*>(pl)->updateAILabel();
+            return;
+        }
+        if (isPlay && g_ai.recording) {
             GJBaseGameLayer::update(dt);
-            if (g_ai.replaying) this->replayStep();
             static_cast<AIPlayLayer*>(pl)->updateAILabel();
             return;
         }
@@ -1013,6 +1037,7 @@ class $modify(AIGameLayer, GJBaseGameLayer) {
 
     void replayStep() {
         if (m_player1->m_isDead) return;
+        // inputs recorded at x were applied before the tick that starts at x
         float x = m_player1->getPositionX();
         auto& run = g_ai.bestRun;
         while (g_ai.replayIdx < run.size() && run[g_ai.replayIdx].x <= x) {

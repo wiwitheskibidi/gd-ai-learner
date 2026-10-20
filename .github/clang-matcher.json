@@ -4,7 +4,7 @@
       "owner": "clang-errors",
       "pattern": [
         {
-          "regexp": "^(.*?):(\d+):(\d+):\s+(error|fatal error):\s+(.*)$",
+          "regexp": "^(.*?):(\\d+):(\\d+):\\s+(error|fatal error):\\s+(.*)$",
           "file": 1,
           "line": 2,
           "column": 3,
@@ -17,7 +17,7 @@
       "owner": "kotlin-errors",
       "pattern": [
         {
-          "regexp": "^e: (?:file://)?(.*?):(\d+):(\d+) (.*)$",
+          "regexp": "^e: (?:file://)?(.*?):(\\d+):(\\d+) (.*)$",
           "file": 1,
           "line": 2,
           "column": 3,
