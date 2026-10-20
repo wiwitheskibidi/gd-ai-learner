@@ -493,35 +493,31 @@ data class BrandPalette(
 
 val geodeColorPalette = BrandPalette(
     animatedIcon = AnimatedIconSpec(
+        // GD AI Learner colours: cyan cube frame, pink "neural" nodes
         lightPalette = ColorPalette(
             outerColors = listOf(
-                0.0f to Color(0xfff5b11d),
-                0.10f to Color(0xfff0834d),
-                0.24f to Color(0xffe85f6b),
-                0.49f to Color(0xffc9659e),
-                1.0f to Color(0xffb9588f)
+                0.0f to Color(0xff0e7490),
+                0.35f to Color(0xff0891b2),
+                0.7f to Color(0xff06b6d4),
+                1.0f to Color(0xff4f46e5)
             ),
             innerColors = listOf(
-                0.48f to Color(0xfff2ce00),
-                0.63f to Color(0xfff4b97e),
-                0.73f to Color(0xfff7b66a),
-                1.0f to Color(0xffeb8fac)
+                0.3f to Color(0xffdb2777),
+                0.7f to Color(0xffc026d3),
+                1.0f to Color(0xff9333ea)
             )
         ),
         darkPalette = ColorPalette(
             outerColors = listOf(
-                0.0f to Color(0xfffffdff),
-                0.08f to Color(0xffF2EAF5),
-                0.12f to Color(0xffEDE5EF),
-                0.31f to Color(0xffCDB5CD),
-                0.49f to Color(0xffBA9BBC),
-                1.0f to Color(0xff8D7ACF),
+                0.0f to Color(0xff67e8f9),
+                0.35f to Color(0xff22d3ee),
+                0.7f to Color(0xff38bdf8),
+                1.0f to Color(0xff818cf8)
             ),
             innerColors = listOf(
-                0.48f to Color(0xffffffff),
-                0.63f to Color(0xfff5e4c2),
-                0.73f to Color(0xffe5c7ad),
-                1.0f to Color(0xffb790a9),
+                0.3f to Color(0xfff9a8d4),
+                0.7f to Color(0xfff472b6),
+                1.0f to Color(0xffe879f9)
             )
         ),
         innerId = R.drawable.geode_monochrome_inner,

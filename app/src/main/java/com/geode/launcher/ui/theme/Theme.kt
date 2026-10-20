@@ -13,15 +13,33 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
 private val DarkColorScheme = darkColorScheme(
-    primary = Purple80,
-    secondary = PurpleGrey80,
-    tertiary = Pink80
+    primary = AiCyan,
+    onPrimary = AiNight,
+    secondary = AiPink,
+    onSecondary = AiNight,
+    tertiary = AiViolet,
+    background = AiNight,
+    surface = AiNight,
+    surfaceVariant = AiNightSurface,
+    surfaceContainer = AiNightSurface,
+    primaryContainer = Color(0xFF0E3A4A),
+    onPrimaryContainer = AiCyan,
+    secondaryContainer = Color(0xFF4A1336),
+    onSecondaryContainer = AiPink,
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40
+    primary = AiCyanDeep,
+    onPrimary = Color.White,
+    secondary = AiPinkDeep,
+    onSecondary = Color.White,
+    tertiary = Color(0xFF7C3AED),
+    background = AiMist,
+    surface = AiMist,
+    primaryContainer = Color(0xFFCFF5FC),
+    onPrimaryContainer = Color(0xFF083344),
+    secondaryContainer = Color(0xFFFCE7F3),
+    onSecondaryContainer = Color(0xFF500724),
 )
 
 enum class Theme {
@@ -43,12 +61,13 @@ val LocalTheme = compositionLocalOf { Theme.LIGHT }
 fun GeodeLauncherTheme(
     theme: Theme = Theme.fromInt(0),
     // Dynamic color is available on Android 12+
-    dynamicColor: Boolean = true,
+    dynamicColor: Boolean = false,
     blackBackground: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+        // GD AI Learner always uses its own colours, never the wallpaper-based ones
+        false && dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             val context = LocalContext.current
             when {
                 theme == Theme.DARK && blackBackground ->

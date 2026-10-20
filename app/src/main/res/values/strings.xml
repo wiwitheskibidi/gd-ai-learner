@@ -17,9 +17,9 @@
     <string name="launcher_download_universal">Download the non 32-bit version of launcher.</string>
     <string name="launcher_settings_icon_alt">settings icon</string>
     <string name="launcher_retry_icon_alt">retry icon</string>
-    <string name="geode_download_title">Geode is not installed.</string>
+    <string name="geode_download_title">The AI engine is not installed.</string>
     <string name="game_outdated">A Geometry Dash update is required.\nYou currently have update %1$s.</string>
-    <string name="geode_download_description">Geode is downloading. Please wait.</string>
+    <string name="geode_download_description">The AI engine is downloading. Please wait.</string>
     <plurals name="automatically_load_countdown">
         <item quantity="one">Automatically launching game in %1$d second.</item>
         <item quantity="other">Automatically launching game in %1$d seconds.</item>
@@ -35,19 +35,19 @@
     </string>
 
     <string name="launcher_game_update_required_short">A Geometry Dash update is required.</string>
-    <string name="launcher_game_update_required">The currently installed version of Geometry Dash is no longer supported. Please update Geometry Dash to version %1$s to continue receiving Geode updates.</string>
+    <string name="launcher_game_update_required">The currently installed version of Geometry Dash is no longer supported. Please update Geometry Dash to version %1$s to continue receiving AI engine updates.</string>
 
     <string name="launcher_update_available">A new launcher update is available!</string>
     <string name="launcher_update_dismiss">Dismiss</string>
     <string name="launcher_update_view">View</string>
     <string name="launcher_update_external_link">View in browser</string>
-    <string name="launcher_update_name">Geode Launcher v%1$s</string>
+    <string name="launcher_update_name">GD AI Learner v%1$s</string>
     <string name="launcher_update_changelog">Changelog</string>
     <string name="launcher_update_released">Released %1$s</string>
     <string name="safe_mode_enable_title">Enable safe mode?</string>
-    <string name="safe_mode_enable_description">Safe mode disables loading of all mods, allowing one to remove problematic mods or diagnose crashes. If you\'re not experiencing issues with Geode, you should probably not be using safe mode.</string>
-    <string name="launcher_failed_to_load">Geode failed to load.</string>
-    <string name="launcher_crashed">Geode crashed.</string>
+    <string name="safe_mode_enable_description">Safe mode disables loading of all mods, allowing one to remove problematic mods or diagnose crashes. If you\'re not experiencing issues with AI engine, you should probably not be using safe mode.</string>
+    <string name="launcher_failed_to_load">The AI engine failed to load.</string>
+    <string name="launcher_crashed">The AI engine crashed.</string>
     <string name="launcher_error_more">Help</string>
     <string name="launcher_error_details">Error details</string>
     <string name="launcher_error_view_logs">View logs</string>
@@ -56,14 +56,14 @@
     <string name="launcher_error_view_details">View details</string>
     <string name="launcher_error_export_crash">Share crash</string>
     <string name="launcher_error_export_missing">No crash dump was found!</string>
-    <string name="launcher_error_device_info">Android %2$s, %1$s (%5$s)\nGD %4$s, Geode %3$s + v%6$s</string>
+    <string name="launcher_error_device_info">Android %2$s, %1$s (%5$s)\nGD %4$s, AI engine %3$s + v%6$s</string>
 
     <string name="launcher_notification_settings">Launcher Settings</string>
-    <string name="launcher_notification_update_failed">Failed to update Geode.</string>
-    <string name="launcher_notification_update_success">Geode updated!</string>
+    <string name="launcher_notification_update_failed">Failed to update AI engine.</string>
+    <string name="launcher_notification_update_success">AI engine updated!</string>
     <string name="launcher_notification_compatibility">Unsupported Geometry Dash version.</string>
-    <string name="launcher_notification_compatibility_description">An update is required to receive Geode updates.</string>
-    <string name="launcher_notification_forwards_compatibility_description">Geode is currently unavailable.</string>
+    <string name="launcher_notification_compatibility_description">An update is required to receive AI engine updates.</string>
+    <string name="launcher_notification_forwards_compatibility_description">The AI engine is currently unavailable.</string>
     <string name="launcher_notification_forwards_compatibility">Unsupported Geometry Dash version.</string>
 
     <string name="launcher_notification_update_cta">Tap for more information.</string>
@@ -80,8 +80,8 @@
     <string name="launcher_cancelled_manual">Launch paused.</string>
     <string name="launcher_cancelled_navigated_away">Launch paused.</string>
     <string name="launcher_cancelled_crash">Launch paused due to a crash.</string>
-    <string name="launcher_cancelled_crash_instant">Geode crashed.</string>
-    <string name="launcher_cancelled_error">Geode cannot be used.</string>
+    <string name="launcher_cancelled_crash_instant">The AI engine crashed.</string>
+    <string name="launcher_cancelled_error">The AI engine cannot be used.</string>
     <string name="launcher_cancelled_outdated">Geometry Dash version %1$s is required.</string>
     <string name="launcher_cancelled_restart">Restart</string>
     <string name="launcher_cancelled_resume">Resume</string>
@@ -93,7 +93,7 @@
     <string name="release_fetch_failed">Update failed.\n%1$s</string>
     <string name="release_fetch_no_releases">No updates found.</string>
     <string name="release_fetch_in_progress">Checking for new releases…</string>
-    <string name="release_fetch_success">Geode updated!</string>
+    <string name="release_fetch_success">AI engine updated!</string>
     <string name="release_fetch_downloading">Downloading update… (%1$s/%2$s)</string>
     <string name="release_fetch_downloading_indeterminate">Downloading update… (%1$s)</string>
     <string name="release_fetch_cancelling">Cancelling update…</string>
@@ -114,9 +114,9 @@
     <string name="load_failed_link_error">Failed to link libraries</string>
     <string name="load_failed_link_error_description">Game libraries could not be found. Try to:</string>
     <string name="load_failed_abi_error">The architecture of the launcher and Geometry Dash do not match. Try to:</string>
-    <string name="load_failed_generic_error">Failed to load Geode</string>
+    <string name="load_failed_generic_error">Failed to load AI engine</string>
     <string name="load_failed_generic_error_description">Uncaught error during game load. Try to:</string>
-    <string name="load_failed_crashed">Geode crashed</string>
+    <string name="load_failed_crashed">The AI engine crashed</string>
     <string name="load_failed_crashed_description">A crash was reported during the last session. Try to:</string>
     <string name="load_failed_recommendation_reinstall">Reinstall Geometry Dash.</string>
     <string name="load_failed_recommendation_switch_32bit_abi">Install the 32-bit version of the launcher.</string>
@@ -124,7 +124,7 @@
     <string name="load_failed_recommendation_update">Verify that the latest versions of the launcher and Geometry Dash are installed.</string>
     <string name="load_failed_recommendation_report">Report this issue to the developers.</string>
     <string name="load_failed_recommendation_safe_mode">Use the safe mode button in Settings.</string>
-    <string name="load_failed_recommendation_dev_stl">Devs: If this is a locally built Geode version, please use the c++_shared ANDROID_STL!</string>
+    <string name="load_failed_recommendation_dev_stl">Devs: If this is a locally built AI engine version, please use the c++_shared ANDROID_STL!</string>
 
     <string name="message_box_cancel">Cancel</string>
     <string name="message_box_accept">OK</string>
@@ -147,7 +147,7 @@
     <string name="preferences_open_file_manager">Open file manager</string>
     <string name="preferences_view_logs">View application logs</string>
     <string name="preferences_view_crashes">View crash dumps</string>
-    <string name="preferences_view_geode_logs">View Geode logs</string>
+    <string name="preferences_view_geode_logs">View AI engine logs</string>
 
     <string name="preference_theme_name">Theme</string>
     <string name="preference_theme_select">Select theme</string>
@@ -220,9 +220,9 @@
     <string name="preference_launcher_version">Android Launcher v%1$s</string>
     <string name="preference_enable_developer_again">You are already a developer!</string>
 
-    <string name="preference_loader_version_name">Geode</string>
+    <string name="preference_loader_version_name">AI engine</string>
     <string name="preference_loader_version_description">%1$s</string>
-    <string name="preference_loader_version">Geode %1$s</string>
+    <string name="preference_loader_version">AI engine %1$s</string>
 
     <string name="preference_game_version_name">Geometry Dash</string>
     <string name="preference_game_version_description">%1$s (%2$s)</string>
@@ -244,7 +244,7 @@
     <string name="preference_check_for_updates_help_copy">Copy</string>
 
     <string name="preference_check_for_updates_none_found">No updates found.</string>
-    <string name="preference_check_for_updates_success">Geode has been updated!</string>
+    <string name="preference_check_for_updates_success">The AI engine has been updated!</string>
     <string name="preference_check_for_updates_downloading">Downloading update…</string>
     <string name="preference_check_for_updates_no_internet">No internet found.</string>
     <string name="preference_check_for_updates_already_updating">An update is already in progress!</string>
@@ -334,16 +334,16 @@
     <string name="title_activity_application_icon">Application icons</string>
     <string name="application_icon_set_failed">Failed to change icon.</string>
     <string name="application_icon_default">Default</string>
-    <string name="application_icon_geode">Geode</string>
+    <string name="application_icon_geode">Classic</string>
     <string name="application_icon_pride">Pride</string>
     <string name="application_icon_trans">Transgender</string>
     <string name="application_icon_sapphire">Sapphire</string>
     <string name="application_icon_green">Android</string>
     <string name="application_icon_confirm">Change icon to %1$s?</string>
-    <string name="application_icon_confirm_description">Geode Launcher will close itself to change the application icon.</string>
+    <string name="application_icon_confirm_description">GD AI Learner will close itself to change the application icon.</string>
 
     <!-- GeodeLogsListingActivity strings -->
-    <string name="title_activity_geode_logs">Geode logs</string>
+    <string name="title_activity_geode_logs">AI engine logs</string>
     <string name="application_geode_logs_no_logs">No logs available.</string>
     <string name="application_geode_logs_empty">File was empty.</string>
 </resources>

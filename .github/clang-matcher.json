@@ -1,0 +1,29 @@
+{
+  "problemMatcher": [
+    {
+      "owner": "clang-errors",
+      "pattern": [
+        {
+          "regexp": "^(.*?):(\d+):(\d+):\s+(error|fatal error):\s+(.*)$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "severity": 4,
+          "message": 5
+        }
+      ]
+    },
+    {
+      "owner": "kotlin-errors",
+      "pattern": [
+        {
+          "regexp": "^e: (?:file://)?(.*?):(\d+):(\d+) (.*)$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "message": 4
+        }
+      ]
+    }
+  ]
+}

@@ -20,11 +20,12 @@ val googleSansFamily = FontFamily(
     Font(R.font.googlesans_medium, FontWeight.Medium)
 )
 
+// techy monospace title for GD AI Learner
 val launcherTitleStyle = TextStyle(
-    fontFamily = quicksandFamily,
-    fontWeight = FontWeight.SemiBold,
-    fontSize = 32.sp,
-    letterSpacing = 0.sp
+    fontFamily = robotoMonoFamily,
+    fontWeight = FontWeight.Medium,
+    fontSize = 28.sp,
+    letterSpacing = 1.sp
 )
 
 val sapphireTitleStyle = TextStyle(

@@ -19,6 +19,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      # turn compiler errors into public annotations (readable without signing in)
+      - run: echo "::add-matcher::.github/clang-matcher.json"
       - uses: geode-sdk/build-geode-mod@main
         with:
           path: mod
@@ -36,6 +38,7 @@ jobs:
     needs: mod
     steps:
       - uses: actions/checkout@v4
+      - run: echo "::add-matcher::.github/clang-matcher.json"
 
       - name: Combine mod builds
         uses: geode-sdk/build-geode-mod/combine@main
