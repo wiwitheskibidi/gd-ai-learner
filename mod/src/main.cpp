@@ -538,7 +538,7 @@ public:
         if (!CCLayerColor::initWithColor({0, 0, 0, 160})) return false;
         m_pause = pause;
         auto win = CCDirector::get()->getWinSize();
-        auto c = win / 2;
+        CCPoint c = {win.width / 2, win.height / 2};
 
         // Hide the pause menu underneath so its buttons can't be pressed through us.
         for (auto child : CCArrayExt<CCNode*>(pause->getChildren())) {
