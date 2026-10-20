@@ -116,11 +116,28 @@ struct Agent {
         return levelLength > 0 ? std::min(100.f, 100.f * x / levelLength) : 0.f;
     }
 
-    // The best run is a single real attempt from the start of the level, so a
-    // replay is an exact copy (no stitched practice segments).
+    // The best run reaches as far as the AI has ever got. Attempts from a practice
+    // checkpoint are spliced in at their start tick; their first input is a "seam"
+    // holding the exact checkpoint state, which the replay restores, so the
+    // spliced part plays out exactly as it did in practice.
     void commitAttempt(float endX) {
-        if (startX > 50.f || endX <= bestRunEnd) return;
-        bestRun = attemptInputs;
+        if (endX <= bestRunEnd || attemptInputs.empty()) return;
+        bool fromStart = startX < 50.f;
+        if (fromStart) {
+            bestRun = attemptInputs;
+            bestRunEnd = endX;
+            return;
+        }
+        uint32_t seamTick = attemptInputs.front().tick;
+        // must start inside the part already covered, with a real level tick
+        if (bestRun.empty() || startX > bestRunEnd || seamTick == 0) return;
+        // sanity: the run must have reached this spot no later than the seam tick
+        for (auto const& in : bestRun) {
+            if (in.x <= startX && in.tick > seamTick) return;
+        }
+        bestRun.erase(std::remove_if(bestRun.begin(), bestRun.end(),
+            [&](Input const& in) { return in.tick >= seamTick; }), bestRun.end());
+        bestRun.insert(bestRun.end(), attemptInputs.begin(), attemptInputs.end());
         bestRunEnd = endX;
     }
 
@@ -147,6 +164,13 @@ struct Agent {
         if (attemptTimes.size() < 2) return 0.f;
         double span = attemptTimes.back() - attemptTimes.front();
         return span > 0 ? static_cast<float>((attemptTimes.size() - 1) * 60.0 / span) : 0.f;
+    }
+
+    // index of the first timeline input at or after this tick (so an attempt that
+    // starts mid-level never replays earlier presses)
+    static size_t firstFrom(std::vector<Input> const& line, uint32_t tick) {
+        return std::lower_bound(line.begin(), line.end(), tick,
+            [](Input const& in, uint32_t t) { return in.tick < t; }) - line.begin();
     }
 
     bool inGuide(uint32_t tick) const {
@@ -467,7 +491,11 @@ static void startAI(PlayLayer* pl) {
     g_ai.episodeOver = false;
     g_ai.holding = false;
     g_ai.tick = 0;
+    g_ai.guideIdx = Agent::firstFrom(g_ai.guide, pl->m_gameState.m_currentProgress);
     g_ai.lastX = g_ai.startX = pl->m_player1->getPositionX();
+    // the AI may take over mid-attempt: start this attempt's timeline with a seam
+    g_ai.attemptInputs.clear();
+    g_ai.attemptInputs.push_back(Agent::capture(pl, false));
     applyTimeScale(true);
 }
 
@@ -862,7 +890,7 @@ class $modify(AIPlayLayer, PlayLayer) {
         }
         if (!g_ai.active) return;
         g_ai.attemptInputs.clear();
-        g_ai.guideIdx = 0;
+        g_ai.guideIdx = Agent::firstFrom(g_ai.guide, m_gameState.m_currentProgress);
         g_ai.attempts++;
         g_ai.episodeOver = false;
         g_ai.deadTicks = 0;
@@ -870,6 +898,8 @@ class $modify(AIPlayLayer, PlayLayer) {
         g_ai.tick = 0;
         g_ai.trajectory.clear();
         g_ai.lastX = g_ai.startX = m_player1->getPositionX();
+        // seam: the exact state this attempt starts from (a checkpoint in practice)
+        g_ai.attemptInputs.push_back(Agent::capture(this, false));
         if (g_ai.attempts % 25 == 0) g_ai.save();
     }
 
