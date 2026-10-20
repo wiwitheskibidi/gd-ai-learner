@@ -60,8 +60,14 @@ struct Agent {
     enum class Switch { None, ToNormal, ToPractice } pendingSwitch = Switch::None;
 
     // Input timelines keyed by X position (best run, player guide).
+    // One button change, stamped with the game's physics tick and the player's
+    // exact state at that moment so playback can be tick-exact and drift-free.
     struct Input {
+        uint32_t tick;
         float x;
+        float y;
+        double yVel;
+        float rot;
         bool hold;
     };
     std::vector<Input> attemptInputs;
@@ -69,10 +75,13 @@ struct Agent {
     float bestRunEnd = 0.f;
     bool replaying = false;
     size_t replayIdx = 0;
+    size_t guideIdx = 0;
+    bool replayEnded = false;   // reached the end of a best run that ended in a death
 
     // Guide: the player records the start of the level; the AI copies it there.
     std::vector<Input> guide;
     float guideEnd = 0.f;
+    uint32_t guideEndTick = 0;
     bool recording = false;
     bool useGuide = true;
 
@@ -140,10 +149,14 @@ struct Agent {
         return span > 0 ? static_cast<float>((attemptTimes.size() - 1) * 60.0 / span) : 0.f;
     }
 
-    bool guideHoldAt(float x) const {
-        auto it = std::upper_bound(guide.begin(), guide.end(), x,
-            [](float v, Input const& in) { return v < in.x; });
-        return it == guide.begin() ? false : std::prev(it)->hold;
+    bool inGuide(uint32_t tick) const {
+        return useGuide && !guide.empty() && tick < guideEndTick;
+    }
+
+    static Input capture(GJBaseGameLayer* gl, bool hold) {
+        auto p = gl->m_player1;
+        return {gl->m_gameState.m_currentProgress, p->m_position.x, p->m_position.y,
+                p->m_yVelocity, p->getRotation(), hold};
     }
 
     static int modeOf(PlayerObject* p) {
@@ -275,26 +288,35 @@ struct Agent {
     template <class T>
     static bool get(std::ifstream& f, T& v) { return static_cast<bool>(f.read(reinterpret_cast<char*>(&v), sizeof(T))); }
 
-    static void writeInputs(std::filesystem::path const& path, float end, std::vector<Input> const& ins) {
+    static void writeInputs(std::filesystem::path const& path, float end, uint32_t endTick,
+                            std::vector<Input> const& ins) {
         std::ofstream f(path, std::ios::binary);
         if (!f) return;
         put(f, end);
+        put(f, endTick);
         for (auto& in : ins) {
+            put(f, in.tick);
             put(f, in.x);
+            put(f, in.y);
+            put(f, in.yVel);
+            put(f, in.rot);
             char h = in.hold ? 1 : 0;
             put(f, h);
         }
     }
 
-    static void readInputs(std::filesystem::path const& path, float& end, std::vector<Input>& ins) {
+    static void readInputs(std::filesystem::path const& path, float& end, uint32_t& endTick,
+                           std::vector<Input>& ins) {
         ins.clear();
         end = 0.f;
+        endTick = 0;
         std::ifstream f(path, std::ios::binary);
         if (!f) return;
         get(f, end);
+        get(f, endTick);
         Input in;
         char h;
-        while (get(f, in.x) && get(f, h)) {
+        while (get(f, in.tick) && get(f, in.x) && get(f, in.y) && get(f, in.yVel) && get(f, in.rot) && get(f, h)) {
             in.hold = h != 0;
             ins.push_back(in);
         }
@@ -360,8 +382,9 @@ struct Agent {
     }
 
     void save() {
-        writeInputs(file("run"), bestRunEnd, bestRun);
-        writeInputs(file("guide"), guideEnd, guide);
+        uint32_t unusedTick = 0;
+        writeInputs(file("run2"), bestRunEnd, unusedTick, bestRun);
+        writeInputs(file("guide2"), guideEnd, guideEndTick, guide);
         writeTable(file("qtable"), q, bestX, attempts);
         writeTable(dir() / "general.qtable", gq, 0.f, 0);
         saveMeta();
@@ -386,15 +409,16 @@ struct Agent {
         frontierDeaths = 0;
         frontierBest = 0.f;
         attemptTimes.clear();
-        readInputs(file("run"), bestRunEnd, bestRun);
-        readInputs(file("guide"), guideEnd, guide);
+        uint32_t unusedTick = 0;
+        readInputs(file("run2"), bestRunEnd, unusedTick, bestRun);
+        readInputs(file("guide2"), guideEnd, guideEndTick, guide);
         readTable(file("qtable"), q, bestX, attempts);
         loadMeta();
     }
 
     void resetLevelData() {
         std::error_code ec;
-        for (auto ext : {"qtable", "run", "guide", "meta"}) std::filesystem::remove(file(ext), ec);
+        for (auto ext : {"qtable", "run2", "guide2", "meta"}) std::filesystem::remove(file(ext), ec);
         Mod::get()->setSavedValue<float>(fmt::format("best-{}", levelID), -1.f);
         Mod::get()->setSavedValue<int>(fmt::format("attempts-{}", levelID), 0);
         int id = levelID;
@@ -416,7 +440,7 @@ static int copyAIFiles(std::filesystem::path const& from, std::filesystem::path 
     int n = 0;
     for (auto& entry : std::filesystem::directory_iterator(from, ec)) {
         auto ext = entry.path().extension().string();
-        if (ext != ".qtable" && ext != ".run" && ext != ".guide" && ext != ".meta") continue;
+        if (ext != ".qtable" && ext != ".run2" && ext != ".guide2" && ext != ".meta") continue;
         std::filesystem::copy_file(entry.path(), to / entry.path().filename(),
             std::filesystem::copy_options::overwrite_existing, ec);
         if (!ec) n++;
@@ -454,9 +478,10 @@ static void stopAI(PlayLayer* pl) {
     applyTimeScale(false);
 }
 
-static void finishRecording(float endX) {
+static void finishRecording(float endX, uint32_t endTick) {
     g_ai.recording = false;
     g_ai.guideEnd = std::max(0.f, endX);
+    g_ai.guideEndTick = endTick;
     g_ai.save();
     Notification::create(fmt::format("Guide saved ({:.0f}% of the level)", g_ai.pctOf(g_ai.guideEnd)),
         NotificationIcon::Success)->show();
@@ -466,8 +491,6 @@ static void finishRecording(float endX) {
 
 constexpr int HEATMAP_TAG = 0xA1EA7;
 
-// set when a replay restarts; the control loop clears its tick accumulator
-static bool s_replayAccReset = false;
 
 static void refreshHeatmap(GJBaseGameLayer* gl) {
     if (!gl || !gl->m_objectLayer) return;
@@ -691,6 +714,7 @@ public:
         g_ai.pendingSwitch = Agent::Switch::None;
         g_ai.replaying = true;
         g_ai.replayIdx = 0;
+        g_ai.replayEnded = false;
         applyTimeScale(false);
         this->resumeGame();
         // restart from 0% in normal mode (togglePracticeMode resets the level itself)
@@ -703,7 +727,7 @@ public:
         auto pl = PlayLayer::get();
         if (!pl) return;
         if (g_ai.recording) {
-            finishRecording(pl->m_player1->getPositionX());
+            finishRecording(pl->m_player1->getPositionX(), pl->m_gameState.m_currentProgress);
             this->refresh();
             return;
         }
@@ -716,6 +740,7 @@ public:
         g_ai.pendingSwitch = Agent::Switch::None;
         g_ai.guide.clear();
         g_ai.guideEnd = 0.f;
+        g_ai.guideEndTick = 0;
         g_ai.recording = true;
         applyTimeScale(false);
         Notification::create("Recording: play the start of the level", NotificationIcon::Info)->show();
@@ -826,7 +851,7 @@ class $modify(AIPlayLayer, PlayLayer) {
         PlayLayer::resetLevel();
         if (g_ai.replaying) {
             g_ai.replayIdx = 0;
-            s_replayAccReset = true;
+            g_ai.guideIdx = 0;
             handleButton(false, 1, true);
             return;
         }
@@ -837,6 +862,7 @@ class $modify(AIPlayLayer, PlayLayer) {
         }
         if (!g_ai.active) return;
         g_ai.attemptInputs.clear();
+        g_ai.guideIdx = 0;
         g_ai.attempts++;
         g_ai.episodeOver = false;
         g_ai.deadTicks = 0;
@@ -854,7 +880,8 @@ class $modify(AIPlayLayer, PlayLayer) {
         if (!player->m_isDead) return;
         if (recordDeath) {
             // keep the guide up to a little before the mistake
-            finishRecording(player->getPositionX() - 90.f);
+            uint32_t now = m_gameState.m_currentProgress;
+            finishRecording(player->getPositionX() - 90.f, now > 96 ? now - 96 : 0);
         }
         if (g_ai.replaying && obj != m_anticheatSpike) {
             g_ai.replaying = false;
@@ -896,7 +923,7 @@ class $modify(AIPlayLayer, PlayLayer) {
 
     void levelComplete() {
         if (g_ai.recording) {
-            finishRecording(m_levelLength);
+            finishRecording(m_levelLength, m_gameState.m_currentProgress + 1);
             PlayLayer::levelComplete();
             return;
         }
@@ -935,9 +962,18 @@ class $modify(AIPlayLayer, PlayLayer) {
         PlayLayer::levelComplete();
     }
 
+    // Opening the pause menu while recording a guide ends the recording right there.
+    void pauseGame(bool unfocused) {
+        if (g_ai.recording) {
+            finishRecording(m_player1->getPositionX(), m_gameState.m_currentProgress);
+            handleButton(false, 1, true);
+        }
+        PlayLayer::pauseGame(unfocused);
+    }
+
     void onQuit() {
         g_ai.replaying = false;
-        if (g_ai.recording) finishRecording(m_player1->getPositionX());
+        if (g_ai.recording) finishRecording(m_player1->getPositionX(), m_gameState.m_currentProgress);
         if (g_ai.active) {
             g_ai.save();
             g_ai.active = false;
@@ -969,7 +1005,7 @@ class $modify(AIPlayLayer, PlayLayer) {
         } else if (g_ai.active) {
             const char* phase = g_ai.verifying ? "normal run"
                 : g_ai.rapid ? (g_ai.useCheckpoints ? "practice (rapid)" : "rapid, no checkpoints") : "learning";
-            bool guided = g_ai.useGuide && !g_ai.guide.empty() && m_player1->getPositionX() < g_ai.guideEnd;
+            bool guided = g_ai.inGuide(m_gameState.m_currentProgress);
             f->label->setString(fmt::format("AI {}{}  attempt {}  best {:.1f}%", phase, guided ? " (guided)" : "",
                 g_ai.attempts, g_ai.pctOf(g_ai.bestX)).c_str());
         }
@@ -978,19 +1014,13 @@ class $modify(AIPlayLayer, PlayLayer) {
 
 // ---------- the control loop ----------
 
-// GD 2.2 simulates physics at a fixed 240 ticks per second.
-constexpr float PHYSICS_TPS = 240.f;
-// a hair over one tick so float rounding never yields a 0-tick update
-constexpr float TICK_DT = 1.0001f / PHYSICS_TPS;
-static float s_replayAcc = 0.f;
-
 class $modify(AIGameLayer, GJBaseGameLayer) {
     // Record the player's own inputs while recording a guide.
     void handleButton(bool down, int button, bool isPlayer1) {
         GJBaseGameLayer::handleButton(down, button, isPlayer1);
         auto pl = PlayLayer::get();
         if (g_ai.recording && button == 1 && isPlayer1 && pl && static_cast<GJBaseGameLayer*>(pl) == this) {
-            g_ai.guide.push_back({m_player1->getPositionX(), down});
+            g_ai.guide.push_back(Agent::capture(this, down));
         }
     }
 
@@ -998,19 +1028,16 @@ class $modify(AIGameLayer, GJBaseGameLayer) {
         auto pl = PlayLayer::get();
         bool isPlay = pl && static_cast<GJBaseGameLayer*>(pl) == this;
         if (isPlay && g_ai.replaying) {
-            // One physics tick per update call, applying recorded inputs between
-            // ticks, so presses land on exactly the same tick as when recorded.
-            if (s_replayAccReset) {
-                s_replayAcc = 0.f;
-                s_replayAccReset = false;
-            }
-            s_replayAcc += dt * PHYSICS_TPS;
-            int ticks = 0;
-            while (s_replayAcc >= 1.f && ticks < 64 && g_ai.replaying) {
-                s_replayAcc -= 1.f;
-                ticks++;
-                this->replayStep();
-                GJBaseGameLayer::update(TICK_DT);
+            GJBaseGameLayer::update(dt);
+            if (g_ai.replayEnded) {
+                // stop just before the spot where this run died, instead of dying
+                g_ai.replayEnded = false;
+                g_ai.replaying = false;
+                handleButton(false, 1, true);
+                Notification::create(fmt::format("End of the AI's best run ({:.1f}%)", g_ai.pctOf(g_ai.bestRunEnd)),
+                    NotificationIcon::Info)->show();
+                pl->pauseGame(false);
+                return;
             }
             static_cast<AIPlayLayer*>(pl)->updateAILabel();
             return;
@@ -1035,15 +1062,39 @@ class $modify(AIGameLayer, GJBaseGameLayer) {
         static_cast<AIPlayLayer*>(pl)->updateAILabel();
     }
 
-    void replayStep() {
-        if (m_player1->m_isDead) return;
-        // inputs recorded at x were applied before the tick that starts at x
-        float x = m_player1->getPositionX();
-        auto& run = g_ai.bestRun;
-        while (g_ai.replayIdx < run.size() && run[g_ai.replayIdx].x <= x) {
-            handleButton(run[g_ai.replayIdx].hold, 1, true);
-            g_ai.replayIdx++;
+    // Applies every timeline input due at this tick, restoring the player's
+    // recorded state so tiny float differences can never add up.
+    void applyDue(std::vector<Agent::Input> const& line, size_t& idx, uint32_t tick, bool fixState) {
+        while (idx < line.size() && line[idx].tick <= tick) {
+            auto const& in = line[idx++];
+            if (fixState) {
+                m_player1->m_position = CCPoint{in.x, in.y};
+                m_player1->setPosition({in.x, in.y});
+                m_player1->m_yVelocity = in.yVel;
+                m_player1->setRotation(in.rot);
+            }
+            GJBaseGameLayer::handleButton(in.hold, 1, true);
+            if (g_ai.active) {
+                g_ai.holding = in.hold;
+                g_ai.attemptInputs.push_back(in);
+            }
         }
+    }
+
+    // Runs once per physics tick: the exact place where replays and guides press.
+    void processCommands(float dt, bool isHalfTick, bool isLastTick) {
+        auto pl = PlayLayer::get();
+        if (pl && static_cast<GJBaseGameLayer*>(pl) == this && !m_player1->m_isDead) {
+            uint32_t tick = m_gameState.m_currentProgress;
+            if (g_ai.replaying) {
+                applyDue(g_ai.bestRun, g_ai.replayIdx, tick, true);
+                bool finished = g_ai.bestRunEnd >= m_levelLength;
+                if (!finished && m_player1->getPositionX() >= g_ai.bestRunEnd - 45.f) g_ai.replayEnded = true;
+            } else if (g_ai.active && g_ai.inGuide(tick)) {
+                applyDue(g_ai.guide, g_ai.guideIdx, tick, true);
+            }
+        }
+        GJBaseGameLayer::processCommands(dt, isHalfTick, isLastTick);
     }
 
     void aiStep(PlayLayer* pl) {
@@ -1095,20 +1146,19 @@ class $modify(AIGameLayer, GJBaseGameLayer) {
 
         uint64_t key = Agent::makeKey(p, g_ai.holding);
         uint64_t gkey = g_ai.makeFeatureKey(p, g_ai.holding);
-        int a;
-        if (g_ai.useGuide && !g_ai.guide.empty() && x < g_ai.guideEnd) {
-            // Follow the player's guide here; the AI still learns from these steps.
-            a = g_ai.guideHoldAt(x) ? 1 : 0;
-        } else {
-            a = g_ai.choose(key, gkey, x);
+        if (g_ai.inGuide(m_gameState.m_currentProgress)) {
+            // The guide presses for us (in processCommands); the AI still learns from it.
+            g_ai.trajectory.push_back({key, gkey, g_ai.holding ? 1 : 0, 0.f});
+            return;
         }
+        int a = g_ai.choose(key, gkey, x);
         g_ai.trajectory.push_back({key, gkey, a, 0.f});
 
         bool hold = a == 1;
         if (hold != g_ai.holding) {
+            g_ai.attemptInputs.push_back(Agent::capture(this, hold));
             handleButton(hold, 1, true);
             g_ai.holding = hold;
-            g_ai.attemptInputs.push_back({x, hold});
         }
     }
 };
