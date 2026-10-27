@@ -36,6 +36,8 @@ jobs:
     name: Build APK
     runs-on: ubuntu-24.04
     needs: mod
+    permissions:
+      contents: write   # to publish the APK as a release
     steps:
       - uses: actions/checkout@v4
       - run: echo "::add-matcher::.github/clang-matcher.json"
@@ -74,3 +76,17 @@ jobs:
         with:
           name: gd-ai-learner-apk
           path: gd-ai-learner.apk
+
+      # Every build on main becomes a public release, so the newest APK is always at
+      # https://github.com/<owner>/<repo>/releases/latest/download/gd-ai-learner.apk
+      - name: Publish release
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "build-${{ github.run_number }}" gd-ai-learner.apk \
+            --repo "${{ github.repository }}" \
+            --target "${{ github.sha }}" \
+            --title "GD AI Learner build ${{ github.run_number }}" \
+            --notes "Built from ${GITHUB_SHA::7}: $(git log -1 --pretty=%s)" \
+            --latest

@@ -9,9 +9,11 @@ It uses your own Geometry Dash install (Play Store, version 2.2081). The game
 itself is not included or modified.
 
 ## Get the APK
-1. Push this folder to a new GitHub repo.
-2. GitHub > **Actions** > "Build GD AI Learner APK" runs automatically (~10 min).
-3. Download the **gd-ai-learner-apk** artifact and unzip it.
+Newest build (no sign-in needed):
+https://github.com/wiwitheskibidi/gd-ai-learner/releases/latest/download/gd-ai-learner.apk
+
+Every push to `main` builds the APK on GitHub Actions (~10 min) and publishes it as a
+release named `build-<number>`; older builds stay on the Releases page.
 
 ## Install on BlueStacks
 Drag `gd-ai-learner.apk` onto the BlueStacks window (or use "Install APK"
