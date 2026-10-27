@@ -189,6 +189,32 @@ std::string schemaJson() {
 "x":{{"type":"integer"}},"y":{{"type":"integer"}},"flipped":{{"type":"boolean"}}}}}}}}}}}})", names);
 }
 
+// Turns a model's JSON answer ({"objects": [...]}) into editor objects. Tolerates
+// markdown fences or reasoning text around the JSON.
+Result<std::vector<GenObj>> parseLevel(std::string text, std::string const& who) {
+    auto start = text.find('{');
+    auto end = text.rfind('}');
+    if (start == std::string::npos || end == std::string::npos || end < start) {
+        return Err(fmt::format("{}'s answer had no level in it", who));
+    }
+    auto level = matjson::parse(std::string_view(text).substr(start, end - start + 1));
+    if (!level) return Err(fmt::format("{}'s answer could not be read", who));
+
+    std::vector<GenObj> out;
+    if (auto objs = level.unwrap()["objects"].asArray()) {
+        for (auto& o : objs.unwrap()) {
+            int id = idFor(o["type"].asString().unwrapOr(""));
+            if (!id) continue;
+            int x = static_cast<int>(o["x"].asInt().unwrapOr(-1));
+            int y = static_cast<int>(o["y"].asInt().unwrapOr(-1));
+            if (x < 0 || x > 5000 || y < 0 || y > 20) continue;
+            out.push_back({id, x, y, o["flipped"].asBool().unwrapOr(false)});
+        }
+    }
+    if (out.empty()) return Err(fmt::format("{} returned an empty level", who));
+    return Ok(out);
+}
+
 // Runs on a worker thread. Returns the objects, or an error message.
 Result<std::vector<GenObj>> askClaude(std::string const& key, std::string const& model, std::string const& prompt) {
     auto schema = matjson::parse(schemaJson());
@@ -239,22 +265,102 @@ Result<std::vector<GenObj>> askClaude(std::string const& key, std::string const&
             if (block["type"].asString().unwrapOr("") == "text") text += block["text"].asString().unwrapOr("");
         }
     }
-    auto level = matjson::parse(text);
-    if (!level) return Err("Claude's answer could not be read");
+    return parseLevel(text, "Claude");
+}
 
-    std::vector<GenObj> out;
-    if (auto objs = level.unwrap()["objects"].asArray()) {
-        for (auto& o : objs.unwrap()) {
-            int id = idFor(o["type"].asString().unwrapOr(""));
-            if (!id) continue;
-            int x = static_cast<int>(o["x"].asInt().unwrapOr(-1));
-            int y = static_cast<int>(o["y"].asInt().unwrapOr(-1));
-            if (x < 0 || x > 5000 || y < 0 || y > 20) continue;
-            out.push_back({id, x, y, o["flipped"].asBool().unwrapOr(false)});
-        }
+// ---------- OpenAI-compatible providers (Qwen, DeepSeek, OpenRouter, custom) ----------
+
+struct Provider {
+    std::string name;    // shown to the user
+    std::string url;     // base URL ending in /v1 (or equivalent)
+    std::string model;
+    std::string key;
+    bool claude = false;
+};
+
+// Reads the "Level builder AI" settings (call on the main thread).
+Provider currentProvider() {
+    auto mod = Mod::get();
+    auto choice = mod->getSettingValue<std::string>("ai-provider");
+    Provider p;
+    if (choice == "Claude") {
+        p = {"Claude", "https://api.anthropic.com/v1", mod->getSettingValue<std::string>("claude-model"),
+             mod->getSettingValue<std::string>("anthropic-api-key"), true};
+        return p;
     }
-    if (out.empty()) return Err("Claude returned an empty level");
-    return Ok(out);
+    p.key = mod->getSettingValue<std::string>("other-api-key");
+    if (choice == "Qwen") p = {"Qwen", "https://dashscope-intl.aliyuncs.com/compatible-mode/v1", "qwen-plus", p.key};
+    else if (choice == "DeepSeek") p = {"DeepSeek", "https://api.deepseek.com/v1", "deepseek-chat", p.key};
+    else if (choice == "OpenRouter") p = {"OpenRouter", "https://openrouter.ai/api/v1", "openrouter/auto", p.key};
+    else p = {"Custom AI", "", "", p.key};
+    auto url = mod->getSettingValue<std::string>("custom-base-url");
+    auto model = mod->getSettingValue<std::string>("other-model");
+    if (!url.empty()) p.url = url;
+    if (!model.empty()) p.model = model;
+    while (!p.url.empty() && p.url.back() == '/') p.url.pop_back();
+    return p;
+}
+
+std::string formatInstructions() {
+    std::string names;
+    for (auto& t : OBJECT_TYPES) {
+        if (!names.empty()) names += ", ";
+        names += t.name;
+    }
+    return fmt::format(
+        "\n\nAnswer with JSON only, exactly in this shape:\n"
+        "{{\"objects\": [{{\"type\": \"spike\", \"x\": 12, \"y\": 0, \"flipped\": false}}, ...]}}\n"
+        "\"type\" must be one of: {}.\n\"x\" and \"y\" are whole numbers. Use at most 300 objects.", names);
+}
+
+Result<std::vector<GenObj>> askOpenAICompatible(Provider const& p, std::string const& prompt) {
+    if (p.url.empty()) return Err("set \"Custom API base URL\" in the mod settings");
+    if (p.model.empty()) return Err("set \"Model\" in the mod settings");
+
+    auto messages = matjson::Value::array();
+    messages.push(matjson::makeObject({{"role", "system"}, {"content", std::string(SYSTEM_PROMPT) + formatInstructions()}}));
+    messages.push(matjson::makeObject({{"role", "user"}, {"content", "Build this level: " + prompt}}));
+
+    auto send = [&](bool jsonMode) {
+        auto body = matjson::makeObject({
+            {"model", p.model},
+            {"max_tokens", 8192},
+            {"temperature", 0.7},
+        });
+        body["messages"] = messages;
+        if (jsonMode) body["response_format"] = matjson::makeObject({{"type", "json_object"}});
+        geode::utils::web::WebRequest req;
+        req.header("Authorization", "Bearer " + p.key);
+        req.header("content-type", "application/json");
+        req.timeout(std::chrono::seconds(300));
+        req.bodyJSON(body);
+        return req.postSync(p.url + "/chat/completions");
+    };
+
+    auto res = send(true);
+    // Some models/providers don't support JSON mode; ask again without it.
+    if (res.code() == 400 || res.code() == 422) res = send(false);
+
+    auto json = res.json();
+    if (!json) return Err(fmt::format("network error (HTTP {})", res.code()));
+    auto& j = json.unwrap();
+    if (!res.ok()) {
+        std::string msg = j["error"]["message"].asString().unwrapOr("");
+        if (msg.empty()) msg = j["message"].asString().unwrapOr("unknown error");
+        return Err(fmt::format("{} API error {}: {}", p.name, res.code(), msg));
+    }
+    auto choices = j["choices"].asArray();
+    if (!choices || choices.unwrap().empty()) return Err(fmt::format("{} sent no answer", p.name));
+    auto& choice = choices.unwrap()[0];
+    if (choice["finish_reason"].asString().unwrapOr("") == "length") {
+        return Err("level was too big; try a shorter one");
+    }
+    return parseLevel(choice["message"]["content"].asString().unwrapOr(""), p.name);
+}
+
+Result<std::vector<GenObj>> askAI(Provider const& p, std::string const& prompt) {
+    if (p.claude) return askClaude(p.key, p.model, prompt);
+    return askOpenAICompatible(p, prompt);
 }
 
 // ---------- placing objects in the editor ----------
@@ -338,10 +444,11 @@ public:
         m_input->setPosition({c.x, c.y + 45.f});
         this->addChild(m_input);
 
-        bool claude = !Mod::get()->getSettingValue<std::string>("anthropic-api-key").empty();
-        m_status = CCLabelBMFont::create(claude
-            ? fmt::format("Using Claude ({})", Mod::get()->getSettingValue<std::string>("claude-model")).c_str()
-            : "Offline generator (add an Anthropic API key in settings to use Claude)", "chatFont.fnt");
+        auto provider = currentProvider();
+        m_status = CCLabelBMFont::create(!provider.key.empty()
+            ? fmt::format("Using {} ({})", provider.name, provider.model.empty() ? "no model set" : provider.model).c_str()
+            : fmt::format("Offline generator (add a {} API key in settings to use it)", provider.name).c_str(),
+            "chatFont.fnt");
         m_status->setScale(0.55f);
         m_status->setPosition({c.x, c.y + 10.f});
         this->addChild(m_status);
@@ -399,23 +506,22 @@ public:
             return;
         }
         bool replace = m_replace;
-        auto key = Mod::get()->getSettingValue<std::string>("anthropic-api-key");
-        if (key.empty()) {
+        auto provider = currentProvider();
+        if (provider.key.empty()) {
             finish(generateOffline(prompt), replace, " (offline generator)");
             return;
         }
-        auto model = Mod::get()->getSettingValue<std::string>("claude-model");
         s_busy = true;
-        this->setStatus("Claude is designing your level... (this can take a minute)");
-        std::thread([key, model, prompt, replace] {
-            auto result = askClaude(key, model, prompt);
-            geode::queueInMainThread([result = std::move(result), prompt, replace]() mutable {
+        this->setStatus(fmt::format("{} is designing your level... (this can take a minute)", provider.name));
+        std::thread([provider, prompt, replace] {
+            auto result = askAI(provider, prompt);
+            geode::queueInMainThread([result = std::move(result), provider, prompt, replace]() mutable {
                 if (result) {
-                    finish(result.unwrap(), replace, " (by Claude)");
+                    finish(result.unwrap(), replace, fmt::format(" (by {})", provider.name));
                 } else {
                     // fall back to the offline generator so the user still gets a level
                     finish(generateOffline(prompt), replace,
-                        fmt::format(" (offline; Claude failed: {})", result.unwrapErr()));
+                        fmt::format(" (offline; {} failed: {})", provider.name, result.unwrapErr()));
                 }
             });
         }).detach();

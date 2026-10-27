@@ -7,7 +7,7 @@
 	},
 	"id": "william.gd-ai-learner",
 	"name": "AI Learner",
-	"version": "v1.1.0",
+	"version": "v1.2.0",
 	"developer": "William",
 	"description": "AI that learns any level (rapid learning, guides, replays, stats) and builds levels from a prompt.",
 	"settings": {
@@ -53,9 +53,22 @@
 			"default": true,
 			"description": "Also learn from what's coming up (spikes, blocks), so skills carry over to other levels."
 		},
+		"ai-provider": {
+			"type": "string",
+			"name": "Level builder AI",
+			"default": "Claude",
+			"one-of": [
+				"Claude",
+				"Qwen",
+				"DeepSeek",
+				"OpenRouter",
+				"Custom (OpenAI-compatible)"
+			],
+			"description": "Which AI the AI Level Builder uses. Without an API key for it, the free offline generator is used."
+		},
 		"anthropic-api-key": {
 			"type": "string",
-			"name": "Anthropic API key",
+			"name": "API key (Claude)",
 			"default": "",
 			"description": "Optional. Lets the AI Level Builder use Claude. Leave empty to use the free offline generator. Stored on this device only."
 		},
@@ -64,6 +77,24 @@
 			"name": "Claude model",
 			"default": "claude-opus-5-5",
 			"description": "Model used by the AI Level Builder."
+		},
+		"other-api-key": {
+			"type": "string",
+			"name": "API key (Qwen / DeepSeek / OpenRouter / custom)",
+			"default": "",
+			"description": "Key for the provider chosen above when it isn't Claude. Stored on this device only."
+		},
+		"other-model": {
+			"type": "string",
+			"name": "Model (Qwen / DeepSeek / OpenRouter / custom)",
+			"default": "",
+			"description": "Leave empty for the default: qwen-plus, deepseek-chat or openrouter/auto. Examples: qwen-max, qwen-turbo."
+		},
+		"custom-base-url": {
+			"type": "string",
+			"name": "Custom API base URL",
+			"default": "",
+			"description": "Needed for Custom; optional override otherwise. Must accept OpenAI-style /chat/completions. Mainland-China Qwen: https://dashscope.aliyuncs.com/compatible-mode/v1"
 		}
 	}
 }
