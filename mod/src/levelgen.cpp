@@ -175,7 +175,7 @@ Physics to respect so the level is beatable:
 - Ball/spider flip gravity, so give them a ceiling row too.
 - Put a portal before every game mode change and leave 6 empty blocks at the start.
 - "flipped" turns an object upside down (use it for ceiling spikes).
-Keep the level fun, readable and matched to the requested difficulty and length. Use at most 500 objects.)";
+Keep the level fun, readable and matched to the requested difficulty and length.)";
 
 std::string schemaJson() {
     std::string names;
@@ -192,6 +192,7 @@ std::string schemaJson() {
 // Turns a model's JSON answer ({"objects": [...]}) into editor objects. Tolerates
 // markdown fences or reasoning text around the JSON.
 Result<std::vector<GenObj>> parseLevel(std::string text, std::string const& who) {
+    if (auto think = text.rfind("</think>"); think != std::string::npos) text = text.substr(think + 8);
     auto start = text.find('{');
     auto end = text.rfind('}');
     if (start == std::string::npos || end == std::string::npos || end < start) {
@@ -223,7 +224,7 @@ Result<std::vector<GenObj>> askClaude(std::string const& key, std::string const&
     auto body = matjson::makeObject({
         {"model", model},
         {"max_tokens", 32000},
-        {"system", SYSTEM_PROMPT},
+        {"system", std::string(SYSTEM_PROMPT) + " Use at most 500 objects."},
         {"output_config", matjson::makeObject({
             {"effort", "medium"},
             {"format", matjson::makeObject({{"type", "json_schema"}, {"schema", schema.unwrap()}})},
@@ -276,6 +277,8 @@ struct Provider {
     std::string model;
     std::string key;
     bool claude = false;
+    bool needsKey = true;
+    bool local = false;   // a model running on the user's own PC (slower, no key)
 };
 
 // Reads the "Level builder AI" settings (call on the main thread).
@@ -289,7 +292,13 @@ Provider currentProvider() {
         return p;
     }
     p.key = mod->getSettingValue<std::string>("other-api-key");
-    if (choice == "Qwen") p = {"Qwen", "https://dashscope-intl.aliyuncs.com/compatible-mode/v1", "qwen-plus", p.key};
+    if (choice == "Ollama (this PC)") {
+        // BlueStacks (like the Android emulator) reaches the host PC at 10.0.2.2.
+        p = {"Ollama", "http://10.0.2.2:11434/v1", "qwen3.8:27b", p.key.empty() ? "ollama" : p.key};
+        p.needsKey = false;
+        p.local = true;
+    }
+    else if (choice == "Qwen") p = {"Qwen", "https://dashscope-intl.aliyuncs.com/compatible-mode/v1", "qwen-plus", p.key};
     else if (choice == "DeepSeek") p = {"DeepSeek", "https://api.deepseek.com/v1", "deepseek-chat", p.key};
     else if (choice == "OpenRouter") p = {"OpenRouter", "https://openrouter.ai/api/v1", "openrouter/auto", p.key};
     else p = {"Custom AI", "", "", p.key};
@@ -301,7 +310,7 @@ Provider currentProvider() {
     return p;
 }
 
-std::string formatInstructions() {
+std::string formatInstructions(int maxObjects) {
     std::string names;
     for (auto& t : OBJECT_TYPES) {
         if (!names.empty()) names += ", ";
@@ -310,7 +319,7 @@ std::string formatInstructions() {
     return fmt::format(
         "\n\nAnswer with JSON only, exactly in this shape:\n"
         "{{\"objects\": [{{\"type\": \"spike\", \"x\": 12, \"y\": 0, \"flipped\": false}}, ...]}}\n"
-        "\"type\" must be one of: {}.\n\"x\" and \"y\" are whole numbers. Use at most 300 objects.", names);
+        "\"type\" must be one of: {}.\n\"x\" and \"y\" are whole numbers. Use at most {} objects.", names, maxObjects);
 }
 
 Result<std::vector<GenObj>> askOpenAICompatible(Provider const& p, std::string const& prompt) {
@@ -318,7 +327,7 @@ Result<std::vector<GenObj>> askOpenAICompatible(Provider const& p, std::string c
     if (p.model.empty()) return Err("set \"Model\" in the mod settings");
 
     auto messages = matjson::Value::array();
-    messages.push(matjson::makeObject({{"role", "system"}, {"content", std::string(SYSTEM_PROMPT) + formatInstructions()}}));
+    messages.push(matjson::makeObject({{"role", "system"}, {"content", std::string(SYSTEM_PROMPT) + formatInstructions(300)}}));
     messages.push(matjson::makeObject({{"role", "user"}, {"content", "Build this level: " + prompt}}));
 
     auto send = [&](bool jsonMode) {
@@ -358,8 +367,56 @@ Result<std::vector<GenObj>> askOpenAICompatible(Provider const& p, std::string c
     return parseLevel(choice["message"]["content"].asString().unwrapOr(""), p.name);
 }
 
+// Ollama's own API (not its OpenAI-compatible one) lets us raise the context window
+// (Ollama defaults to 4096 tokens, too small for a whole level), turn off Qwen's
+// slow "thinking" step and force JSON output.
+Result<std::vector<GenObj>> askOllama(Provider const& p, std::string const& prompt) {
+    std::string base = p.url;
+    if (base.size() >= 3 && base.compare(base.size() - 3, 3, "/v1") == 0) base.resize(base.size() - 3);
+
+    auto messages = matjson::Value::array();
+    messages.push(matjson::makeObject({{"role", "system"}, {"content", std::string(SYSTEM_PROMPT) + formatInstructions(150)}}));
+    messages.push(matjson::makeObject({{"role", "user"}, {"content", "Build this level: " + prompt}}));
+
+    auto send = [&](bool noThinking) {
+        auto body = matjson::makeObject({
+            {"model", p.model},
+            {"stream", false},
+            {"format", "json"},
+            {"options", matjson::makeObject({{"num_ctx", 12288}, {"num_predict", 8192}, {"temperature", 0.7}})},
+        });
+        body["messages"] = messages;
+        if (noThinking) body["think"] = false;
+        geode::utils::web::WebRequest req;
+        req.header("content-type", "application/json");
+        // big local models running on a CPU can take many minutes
+        req.timeout(std::chrono::seconds(3600));
+        req.bodyJSON(body);
+        return req.postSync(base + "/api/chat");
+    };
+
+    auto res = send(true);
+    // models without a thinking mode reject "think"; ask again without it
+    if (res.code() == 400) res = send(false);
+
+    auto json = res.json();
+    if (!json) {
+        if (res.code() == 0) {
+            return Err(fmt::format("couldn't reach Ollama at {} - is Ollama running on your PC?", base));
+        }
+        return Err(fmt::format("network error (HTTP {})", res.code()));
+    }
+    auto& j = json.unwrap();
+    if (!res.ok()) {
+        return Err(fmt::format("Ollama error {}: {}", res.code(), j["error"].asString().unwrapOr("unknown error")));
+    }
+    if (j["done_reason"].asString().unwrapOr("") == "length") return Err("level was too big; try a shorter one");
+    return parseLevel(j["message"]["content"].asString().unwrapOr(""), "Ollama");
+}
+
 Result<std::vector<GenObj>> askAI(Provider const& p, std::string const& prompt) {
     if (p.claude) return askClaude(p.key, p.model, prompt);
+    if (p.local) return askOllama(p, prompt);
     return askOpenAICompatible(p, prompt);
 }
 
@@ -445,7 +502,7 @@ public:
         this->addChild(m_input);
 
         auto provider = currentProvider();
-        m_status = CCLabelBMFont::create(!provider.key.empty()
+        m_status = CCLabelBMFont::create(!provider.key.empty() || !provider.needsKey
             ? fmt::format("Using {} ({})", provider.name, provider.model.empty() ? "no model set" : provider.model).c_str()
             : fmt::format("Offline generator (add a {} API key in settings to use it)", provider.name).c_str(),
             "chatFont.fnt");
@@ -507,12 +564,14 @@ public:
         }
         bool replace = m_replace;
         auto provider = currentProvider();
-        if (provider.key.empty()) {
+        if (provider.key.empty() && provider.needsKey) {
             finish(generateOffline(prompt), replace, " (offline generator)");
             return;
         }
         s_busy = true;
-        this->setStatus(fmt::format("{} is designing your level... (this can take a minute)", provider.name));
+        this->setStatus(provider.local
+            ? fmt::format("{} on your PC is designing your level... (a few minutes for big models)", provider.name)
+            : fmt::format("{} is designing your level... (this can take a minute)", provider.name));
         std::thread([provider, prompt, replace] {
             auto result = askAI(provider, prompt);
             geode::queueInMainThread([result = std::move(result), provider, prompt, replace]() mutable {

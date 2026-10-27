@@ -7,7 +7,7 @@
 	},
 	"id": "william.gd-ai-learner",
 	"name": "AI Learner",
-	"version": "v1.2.0",
+	"version": "v1.3.0",
 	"developer": "William",
 	"description": "AI that learns any level (rapid learning, guides, replays, stats) and builds levels from a prompt.",
 	"settings": {
@@ -56,15 +56,16 @@
 		"ai-provider": {
 			"type": "string",
 			"name": "Level builder AI",
-			"default": "Claude",
+			"default": "Ollama (this PC)",
 			"one-of": [
+				"Ollama (this PC)",
 				"Claude",
 				"Qwen",
 				"DeepSeek",
 				"OpenRouter",
 				"Custom (OpenAI-compatible)"
 			],
-			"description": "Which AI the AI Level Builder uses. Without an API key for it, the free offline generator is used."
+			"description": "Which AI the AI Level Builder uses. \"Ollama (this PC)\" uses the model running in Ollama on the PC that runs BlueStacks (no key needed). Online providers need an API key; without one, the free offline generator is used."
 		},
 		"anthropic-api-key": {
 			"type": "string",
@@ -86,15 +87,15 @@
 		},
 		"other-model": {
 			"type": "string",
-			"name": "Model (Qwen / DeepSeek / OpenRouter / custom)",
+			"name": "Model (Ollama / Qwen / DeepSeek / OpenRouter / custom)",
 			"default": "",
-			"description": "Leave empty for the default: qwen-plus, deepseek-chat or openrouter/auto. Examples: qwen-max, qwen-turbo."
+			"description": "Leave empty for the default: qwen3.8:27b (Ollama), qwen-plus, deepseek-chat or openrouter/auto. For Ollama use a name from \"ollama list\", e.g. qwen3.6:latest."
 		},
 		"custom-base-url": {
 			"type": "string",
 			"name": "Custom API base URL",
 			"default": "",
-			"description": "Needed for Custom; optional override otherwise. Must accept OpenAI-style /chat/completions. Mainland-China Qwen: https://dashscope.aliyuncs.com/compatible-mode/v1"
+			"description": "Needed for Custom; optional override otherwise. Must accept OpenAI-style /chat/completions. Ollama on another PC: http://<that PC's IP>:11434/v1. Mainland-China Qwen: https://dashscope.aliyuncs.com/compatible-mode/v1"
 		}
 	}
 }
